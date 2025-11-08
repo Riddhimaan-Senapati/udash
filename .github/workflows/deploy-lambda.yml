@@ -26,34 +26,18 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Build Lambda Layer
+      - name: Build and push Docker image
         run: |
           cd lambda
-          mkdir -p layer/python
-          pip install playwright beautifulsoup4 soupsieve -t layer/python/ --upgrade --no-cache-dir
-          cd layer/python
-          PLAYWRIGHT_BROWSERS_PATH=. python -m playwright install chromium
-          cd ../..
-          cd layer
-          zip -r9 ../playwright-layer.zip . -x "*.pyc" -x "*__pycache__*"
-          cd ..
-
-      - name: Install function dependencies
-        run: |
-          cd lambda
-          python -m pip install --upgrade pip
-          pip install supabase httpx -t package/ --upgrade --no-cache-dir
-
-      - name: Package Lambda function
-        run: |
-          cd lambda/package
-          cp ../lambda_function.py .
-          cp ../scraper_utils.py .
-          find . -type d -name "__pycache__" -delete 2>/dev/null || true
-          find . -type f -name "*.pyc" -delete
-          zip -r9 ../lambda-deployment.zip .
-          cd ..
-          zip -g lambda-deployment.zip lambda_function.py scraper_utils.py
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin 904233117895.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          
+          REPO_NAME="umass-dining-scraper"
+          aws ecr describe-repositories --repository-names $REPO_NAME 2>/dev/null || aws ecr create-repository --repository-name $REPO_NAME
+          
+          IMAGE_URI="904233117895.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$REPO_NAME:latest"
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -62,14 +46,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Upload layer to S3
-        run: |
-          BUCKET_NAME="umass-dining-lambda-deployments"
-          aws s3 ls s3://$BUCKET_NAME 2>/dev/null || aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }}
-          if ! aws s3 ls s3://$BUCKET_NAME/playwright-layer.zip 2>/dev/null; then
-            echo "Uploading Playwright layer"
-            aws s3 cp lambda/playwright-layer.zip s3://$BUCKET_NAME/playwright-layer.zip
-          fi
+
 
       - name: Deploy CloudFormation stack
         run: |
@@ -92,20 +69,11 @@ jobs:
             --output text)
           echo "function_name=$FUNCTION_NAME" >> $GITHUB_OUTPUT
 
-      - name: Upload function to S3
+      - name: Update Lambda function
         run: |
-          BUCKET_NAME="umass-dining-lambda-deployments"
-          PACKAGE_HASH=$(md5sum lambda/lambda-deployment.zip | cut -d' ' -f1)
-          S3_KEY="lambda-deployment-${PACKAGE_HASH}.zip"
-          if ! aws s3 ls s3://$BUCKET_NAME/$S3_KEY 2>/dev/null; then
-            echo "Uploading function package"
-            aws s3 cp lambda/lambda-deployment.zip s3://$BUCKET_NAME/$S3_KEY
-          fi
-          
           aws lambda update-function-code \
             --function-name ${{ steps.get-function.outputs.function_name }} \
-            --s3-bucket $BUCKET_NAME \
-            --s3-key $S3_KEY \
+            --image-uri ${{ env.IMAGE_URI }} \
             --publish
 
       - name: Wait for Lambda update
