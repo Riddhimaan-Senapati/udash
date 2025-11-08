@@ -62,6 +62,15 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Upload layer to S3
+        run: |
+          BUCKET_NAME="umass-dining-lambda-deployments"
+          aws s3 ls s3://$BUCKET_NAME 2>/dev/null || aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }}
+          if ! aws s3 ls s3://$BUCKET_NAME/playwright-layer.zip 2>/dev/null; then
+            echo "Uploading Playwright layer"
+            aws s3 cp lambda/playwright-layer.zip s3://$BUCKET_NAME/playwright-layer.zip
+          fi
+
       - name: Deploy CloudFormation stack
         run: |
           aws cloudformation deploy \
@@ -83,17 +92,9 @@ jobs:
             --output text)
           echo "function_name=$FUNCTION_NAME" >> $GITHUB_OUTPUT
 
-      - name: Upload layer and function to S3
+      - name: Upload function to S3
         run: |
           BUCKET_NAME="umass-dining-lambda-deployments"
-          aws s3 ls s3://$BUCKET_NAME 2>/dev/null || aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }}
-          
-          LAYER_HASH=$(md5sum lambda/playwright-layer.zip | cut -d' ' -f1)
-          if ! aws s3 ls s3://$BUCKET_NAME/playwright-layer.zip 2>/dev/null; then
-            echo "Uploading Playwright layer"
-            aws s3 cp lambda/playwright-layer.zip s3://$BUCKET_NAME/playwright-layer.zip
-          fi
-          
           PACKAGE_HASH=$(md5sum lambda/lambda-deployment.zip | cut -d' ' -f1)
           S3_KEY="lambda-deployment-${PACKAGE_HASH}.zip"
           if ! aws s3 ls s3://$BUCKET_NAME/$S3_KEY 2>/dev/null; then
