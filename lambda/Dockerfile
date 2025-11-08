@@ -1,7 +1,7 @@
 FROM public.ecr.aws/lambda/python:3.12
 
 # Install system dependencies for Chromium
-RUN yum install -y \
+RUN microdnf install -y \
     nss \
     atk \
     cups-libs \
@@ -11,7 +11,7 @@ RUN yum install -y \
     libXrandr \
     libgbm \
     alsa-lib \
-    && yum clean all
+    && microdnf clean all
 
 # Install Python packages
 RUN pip install playwright beautifulsoup4 soupsieve supabase httpx --no-cache-dir
