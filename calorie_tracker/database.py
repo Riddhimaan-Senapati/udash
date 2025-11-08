@@ -29,19 +29,14 @@ class Database:
         Initialize database tables if they don't exist.
         Run these SQL commands in your Supabase SQL editor:
         
-        -- Users table
-        CREATE TABLE IF NOT EXISTS users (
-            id BIGSERIAL PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            age INTEGER NOT NULL,
-            sex TEXT NOT NULL CHECK (sex IN ('M', 'F')),
-            height_cm NUMERIC(5,2) NOT NULL,
-            weight_kg NUMERIC(5,2) NOT NULL,
-            activity_level TEXT NOT NULL CHECK (activity_level IN ('sedentary', 'light', 'moderate', 'active', 'very_active')),
-            bmr NUMERIC(7,2),
-            tdee NUMERIC(7,2),
-            created_at TIMESTAMPTZ DEFAULT NOW()
-        );
+        -- Profiles table (managed by Supabase Auth, extended with health fields)
+        ALTER TABLE profiles ADD COLUMN IF NOT EXISTS age INTEGER;
+        ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sex TEXT CHECK (sex IN ('M', 'F'));
+        ALTER TABLE profiles ADD COLUMN IF NOT EXISTS height_cm NUMERIC(5,2);
+        ALTER TABLE profiles ADD COLUMN IF NOT EXISTS weight_kg NUMERIC(5,2);
+        ALTER TABLE profiles ADD COLUMN IF NOT EXISTS activity_level INTEGER CHECK (activity_level IN (1, 2, 3, 4, 5));
+        ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bmr NUMERIC(7,2);
+        ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tdee NUMERIC(7,2);
         
         -- Food items table
         CREATE TABLE IF NOT EXISTS food_items (
@@ -65,7 +60,7 @@ class Database:
         -- Meal entries table
         CREATE TABLE IF NOT EXISTS meal_entries (
             id BIGSERIAL PRIMARY KEY,
-            user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+            profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
             food_item_id BIGINT REFERENCES food_items(id) ON DELETE CASCADE,
             entry_date DATE NOT NULL,
             meal_category TEXT NOT NULL CHECK (meal_category IN ('Breakfast', 'Lunch', 'Dinner')),
@@ -74,7 +69,7 @@ class Database:
         );
         
         -- Indexes for better performance
-        CREATE INDEX IF NOT EXISTS idx_meal_entries_user_date ON meal_entries(user_id, entry_date);
+        CREATE INDEX IF NOT EXISTS idx_meal_entries_profile_date ON meal_entries(profile_id, entry_date);
         CREATE INDEX IF NOT EXISTS idx_food_items_location_date ON food_items(location, date);
         """
         print("Please run the SQL initialization script in your Supabase SQL editor.")
@@ -340,7 +335,7 @@ class Database:
     def create_meal_entry(self, entry: MealEntry) -> MealEntry:
         """Add a meal entry for a user"""
         data = {
-            "user_id": entry.user_id,
+            "profile_id": entry.profile_id,
             "food_item_id": entry.food_item_id,
             "entry_date": entry.entry_date,
             "meal_category": entry.meal_category,
@@ -424,9 +419,9 @@ class Database:
             )
         return None
     
-    def get_daily_totals(self, user_id: int, date: str) -> Dict[str, float]:
-        """Calculate total nutrition for a user on a specific date"""
-        meals = self.get_user_meals_for_date(user_id, date)
+    def get_daily_totals(self, profile_id: str, date: str) -> Dict[str, float]:
+        """Calculate total nutrition for a profile on a specific date"""
+        meals = self.get_user_meals_for_date(profile_id, date)
         
         totals = {
             "calories": 0,

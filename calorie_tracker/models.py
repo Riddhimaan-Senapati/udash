@@ -13,7 +13,7 @@ class User:
     sex: Optional[str] = None  # 'M' or 'F'
     height_cm: Optional[float] = None
     weight_kg: Optional[float] = None
-    activity_level: Optional[str] = None  # sedentary, light, moderate, active, very_active
+    activity_level: Optional[int] = None  # 1=sedentary, 2=light, 3=moderate, 4=active, 5=very_active
     bmr: Optional[float] = None
     tdee: Optional[float] = None
     created_at: Optional[datetime] = None
@@ -34,17 +34,18 @@ class User:
     def calculate_tdee(self) -> float:
         """
         Calculate Total Daily Energy Expenditure based on activity level
+        Activity levels: 1=sedentary, 2=light, 3=moderate, 4=active, 5=very_active
         """
         activity_multipliers = {
-            'sedentary': 1.2,      # Little or no exercise
-            'light': 1.375,        # Light exercise 1-3 days/week
-            'moderate': 1.55,      # Moderate exercise 3-5 days/week
-            'active': 1.725,       # Heavy exercise 6-7 days/week
-            'very_active': 1.9     # Very heavy exercise, physical job
+            1: 1.2,      # Sedentary - Little or no exercise
+            2: 1.375,    # Light - Light exercise 1-3 days/week
+            3: 1.55,     # Moderate - Moderate exercise 3-5 days/week
+            4: 1.725,    # Active - Heavy exercise 6-7 days/week
+            5: 1.9       # Very Active - Very heavy exercise, physical job
         }
         
         bmr = self.calculate_bmr()
-        multiplier = activity_multipliers.get(self.activity_level.lower(), 1.2)
+        multiplier = activity_multipliers.get(self.activity_level, 1.2)
         tdee = bmr * multiplier
         return round(tdee, 2)
     
