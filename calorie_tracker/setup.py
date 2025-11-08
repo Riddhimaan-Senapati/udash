@@ -1,7 +1,7 @@
 """
 Setup script for the Calorie Tracker application
 This script helps with initial setup and data population
-Using JSON database for testing before Supabase implementation
+Using Supabase (PostgreSQL) for database storage
 """
 
 import os
@@ -10,43 +10,44 @@ from datetime import datetime
 
 
 def check_environment():
-    """Check if data directory exists"""
-    if not os.path.exists("data"):
-        print("📁 Creating data directory...")
-        os.makedirs("data", exist_ok=True)
-        print("✅ Data directory created")
-    else:
-        print("✅ Data directory exists")
+    """Check if .env file exists"""
+    if not os.path.exists(".env"):
+        print("❌ .env file not found")
+        print("   Please create a .env file with your Supabase credentials")
+        print("   See .env.example for reference")
+        return False
+    print("✅ .env file exists")
     return True
 
 
 def check_database_connection():
     """Test database connection"""
     try:
-        from database_json import JSONDatabase
-        db = JSONDatabase(data_dir="data")
-        print("✅ JSON database initialized")
+        from database import Database
+        db = Database()
+        print("✅ Supabase database connected")
         return db
     except Exception as e:
-        print(f"❌ Database initialization failed: {e}")
+        print(f"❌ Database connection failed: {e}")
         return None
 
 
 def check_tables(db):
-    """Check if required files exist"""
+    """Check if database tables are accessible"""
     try:
-        # Check if JSON files exist and are readable
+        # Check if tables exist and are accessible
         users = db.get_all_users()
-        print("✅ Users data file exists")
+        print("✅ Users table accessible")
         
         foods = db.get_all_food_items()
-        print("✅ Food items data file exists")
+        print("✅ Food items table accessible")
         
-        print("✅ Meal entries data file exists")
+        print("✅ Meal entries table accessible")
         
         return True
     except Exception as e:
-        print(f"❌ Data files check failed: {e}")
+        print(f"❌ Database tables check failed: {e}")
+        print("   Make sure you've run the init_database.sql script in Supabase")
         return False
 
 
@@ -118,7 +119,7 @@ def create_demo_user(db):
 
 def main():
     print("=" * 60)
-    print("🍽️  Calorie Tracker Setup (JSON Database)")
+    print("🍽️  Calorie Tracker Setup (Supabase)")
     print("=" * 60)
     print()
     
@@ -129,14 +130,14 @@ def main():
     print()
     
     # Step 2: Check database connection
-    print("Step 2: Initializing JSON database...")
+    print("Step 2: Connecting to Supabase...")
     db = check_database_connection()
     if not db:
         return
     print()
     
     # Step 3: Check tables
-    print("Step 3: Checking data files...")
+    print("Step 3: Checking database tables...")
     if not check_tables(db):
         return
     print()
@@ -159,9 +160,8 @@ def main():
     print("✨ Setup complete!")
     print("=" * 60)
     print()
-    print("📝 Note: Currently using JSON file storage for testing")
-    print("   Data is stored in the 'data' directory")
-    print("   To switch to Supabase later, update the imports in streamlit_app.py")
+    print("📝 Using Supabase (PostgreSQL) for data storage")
+    print("   Data is automatically synced across all devices")
     print()
     print("🚀 To start the application, run:")
     print("   streamlit run streamlit_app.py")
