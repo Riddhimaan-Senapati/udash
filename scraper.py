@@ -30,7 +30,7 @@ def get_available_dates(driver, base_url):
         list: List of tuples (date_value, date_text)
     """
     
-    print(f"  Fetching available dates from {base_url}...")
+    print("Fetching available dates...")
     driver.get(base_url)
     
     # Wait for dropdown to load
@@ -49,7 +49,7 @@ def get_available_dates(driver, base_url):
         date_text = option.text
         dates.append((date_value, date_text))
     
-    print(f"  Found {len(dates)} available dates")
+    print(f"Found {len(dates)} available dates")
     return dates
 
 
@@ -156,7 +156,7 @@ def get_menu_for_date(driver, date_value, date_text):
         dict: Menu data
     """
     
-    print(f"    Fetching menu for {date_text}...")
+    print(f"Fetching menu for {date_text}...")
     
     try:
         # Find and select the dropdown option
@@ -176,17 +176,16 @@ def get_menu_for_date(driver, date_value, date_text):
         return menu_data
         
     except Exception as e:
-        print(f"    Error fetching menu for {date_text}: {e}")
+        print(f"Error fetching menu for {date_text}: {e}")
         return None
 
 
-def get_all_menus_for_location(base_url, location_name):
+def get_all_available_menus(base_url):
     """
-    Scrape menus for all available dates at one location
+    Scrape menus for all available dates
     
     Args:
         base_url: Base URL of the menu page
-        location_name: Name of the location (for display)
         
     Returns:
         list: List of menu data dictionaries
@@ -199,138 +198,94 @@ def get_all_menus_for_location(base_url, location_name):
         available_dates = get_available_dates(driver, base_url)
         
         if not available_dates:
-            print(f"  No dates found for {location_name}. Skipping.")
+            print("No dates found. Exiting.")
             return []
         
-        location_menus = []
+        all_menus = []
         
         for i, (date_value, date_text) in enumerate(available_dates, 1):
-            print(f"    Processing {i}/{len(available_dates)}: {date_text}")
+            print(f"\nProcessing {i}/{len(available_dates)}: {date_text}")
             
             menu_data = get_menu_for_date(driver, date_value, date_text)
             
             if menu_data:
-                location_menus.append(menu_data)
+                all_menus.append(menu_data)
             
             # Small delay between requests
             time.sleep(1)
         
-        return location_menus
+        return all_menus
         
     finally:
         driver.quit()
 
 
-def scrape_all_dining_halls():
-    """
-    Scrape menus from all 4 dining halls
-    
-    Returns:
-        dict: Dictionary with location names as keys and menu lists as values
-    """
-    
-    dining_halls = {
-        'Berkshire': 'https://umassdining.com/menu/berkshire-grab-n-go-menu',
-        'Worcester': 'https://umassdining.com/menu/worcester-menu',
-        'Franklin': 'https://umassdining.com/menu/franklin-menu',
-        'Hampshire': 'https://umassdining.com/menu/hampshire-menu'
-    }
-    
-    all_dining_hall_menus = {}
-    
-    for location_name, url in dining_halls.items():
-        print(f"\n{'='*60}")
-        print(f"Scraping {location_name} Dining Hall")
-        print(f"{'='*60}")
-        
-        menus = get_all_menus_for_location(url, location_name)
-        all_dining_hall_menus[location_name] = menus
-        
-        print(f"✓ Completed {location_name}: {len(menus)} days scraped")
-    
-    return all_dining_hall_menus
-
-
-def save_all_menus_to_json(all_menus, filename='all_dining_halls_menus.json'):
-    """Save all scraped menu data to JSON file"""
+def save_menus_to_json(menus, filename='all_menus.json'):
+    """Save scraped menu data to JSON file"""
     with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(all_menus, f, indent=2, ensure_ascii=False)
-    print(f"\nAll menu data saved to {filename}")
+        json.dump(menus, f, indent=2, ensure_ascii=False)
+    print(f"\nMenu data saved to {filename}")
 
 
-def save_menus_by_location(all_menus):
-    """Save each location's menus to separate JSON files"""
-    for location_name, menus in all_menus.items():
-        filename = f"{location_name.lower()}_menus.json"
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(menus, f, indent=2, ensure_ascii=False)
-        print(f"  {location_name} menu saved to {filename}")
-
-
-def print_overall_summary(all_menus):
-    """Print a summary of all scraped menus"""
+def print_menu_summary(menus):
+    """Print a summary of all menus"""
     print(f"\n{'='*60}")
-    print(f"OVERALL SUMMARY - ALL DINING HALLS")
+    print(f"MENU SUMMARY FOR ALL AVAILABLE DATES")
     print(f"{'='*60}\n")
     
-    for location_name, menus in all_menus.items():
-        print(f"\n{location_name} Dining Hall:")
+    for day_menu in menus:
+        print(f"\n{day_menu['date']} - {day_menu['location']}")
         print("-" * 60)
         
-        if not menus:
-            print("  No menus scraped")
-            continue
-        
-        print(f"  Total days: {len(menus)}")
-        
-        total_items = 0
-        for day_menu in menus:
-            for meal, categories in day_menu['meals'].items():
-                total_items += sum(len(items) for items in categories.values())
-        
-        print(f"  Total menu items: {total_items}")
-        if len(menus) > 0:
-            print(f"  Average items per day: {total_items / len(menus):.1f}")
-        
-        # Show date range
-        if menus:
-            first_date = menus[0]['date']
-            last_date = menus[-1]['date']
-            print(f"  Date range: {first_date} to {last_date}")
-
+        for meal, categories in day_menu['meals'].items():
+            total_items = sum(len(items) for items in categories.values())
+            if total_items > 0:
+                print(f"  {meal}: {total_items} items")
+                
+                for category, items in categories.items():
+                    if items:
+                        print(f"    • {category}: {len(items)} items")
 
 
 # Example usage
 if __name__ == "__main__":
-    print("="*60)
-    print("UMass Dining Menu Scraper - ALL DINING HALLS")
-    print("="*60)
-    print("\nThis will scrape menus from:")
-    print("  1. Berkshire Dining Hall")
-    print("  2. Worcester Dining Hall")
-    print("  3. Franklin Dining Hall")
-    print("  4. Hampshire Dining Hall")
-    print("\nNote: This will take several minutes to complete.")
-    print("="*60)
+    # Base URL for menu page
+    base_url = "https://umassdining.com/menu/berkshire-grab-n-go-menu"
+    # base_url = "https://umassdining.com/menu/worcester-menu"
+    # base_url = "https://umassdining.com/menu/franklin-menu"
+    # base_url = "https://umassdining.com/menu/hampshire-menu"
     
-    # Scrape all dining halls
-    all_menus = scrape_all_dining_halls()
-    
-    # Print overall summary
-    print_overall_summary(all_menus)
-    
-    # Save all menus to one JSON file
-    print("\n" + "="*60)
-    print("SAVING DATA")
     print("="*60)
-    save_all_menus_to_json(all_menus)
+    print("UMass Dining Menu Scraper (Selenium)")
+    print("="*60)
+    print("\nNote: This will open a Chrome browser in the background.")
+    print("Make sure you have Chrome and chromedriver installed.\n")
     
-    # Save each location to separate files
-    print("\nSaving individual location files:")
-    save_menus_by_location(all_menus)
+    # Scrape all available menus
+    all_menus = get_all_available_menus(base_url)
+    
+    if all_menus:
+        # Print summary
+        print_menu_summary(all_menus)
+        
+        # Save to JSON
+        save_menus_to_json(all_menus)
+        
+        # Print overall statistics
+        print(f"\n{'='*60}")
+        print(f"OVERALL STATISTICS")
+        print(f"{'='*60}")
+        print(f"Total days scraped: {len(all_menus)}")
+        
+        total_items = 0
+        for day_menu in all_menus:
+            for meal, categories in day_menu['meals'].items():
+                total_items += sum(len(items) for items in categories.values())
+        
+        print(f"Total menu items (all dates): {total_items}")
+        if len(all_menus) > 0:
+            print(f"Average items per day: {total_items / len(all_menus):.1f}")
 
-    
-    print("\n" + "="*60)
-    print("SCRAPING COMPLETE!")
-    print("="*60)
-    
+
+    else:
+        print("\nNo menus were scraped. Please check the URL and try again.")
