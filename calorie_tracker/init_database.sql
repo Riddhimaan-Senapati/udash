@@ -4,18 +4,23 @@
 -- Run this script in your Supabase SQL Editor
 -- (Dashboard > SQL Editor > New Query)
 -- ========================================
+-- IMPORTANT: This assumes you already have a 'profiles' table for authentication
+-- The 'users' table stores additional user details and references profiles
+-- ========================================
 
--- Drop existing tables if you want to start fresh (CAUTION: This will delete all data!)
--- Uncomment the lines below only if you want to reset everything
--- DROP TABLE IF EXISTS meal_entries CASCADE;
--- DROP TABLE IF EXISTS food_items CASCADE;
--- DROP TABLE IF EXISTS users CASCADE;
+-- Drop existing tables to start fresh (REQUIRED to fix UUID -> BIGSERIAL)
+-- This will delete all existing data!
+DROP TABLE IF EXISTS meal_entries CASCADE;
+DROP TABLE IF EXISTS food_items CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
 -- ========================================
--- Users Table
+-- Users Table (references profiles table)
 -- ========================================
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
+    profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    username TEXT UNIQUE NOT NULL,
     username TEXT UNIQUE NOT NULL,
     age INTEGER NOT NULL CHECK (age >= 13 AND age <= 120),
     sex TEXT NOT NULL CHECK (sex IN ('M', 'F')),
@@ -30,7 +35,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- ========================================
 -- Food Items Table
 -- ========================================
-CREATE TABLE IF NOT EXISTS food_items (
+CREATE TABLE food_items (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     serving_size TEXT NOT NULL,
@@ -51,7 +56,7 @@ CREATE TABLE IF NOT EXISTS food_items (
 -- ========================================
 -- Meal Entries Table
 -- ========================================
-CREATE TABLE IF NOT EXISTS meal_entries (
+CREATE TABLE meal_entries (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     food_item_id BIGINT NOT NULL REFERENCES food_items(id) ON DELETE CASCADE,
@@ -64,32 +69,24 @@ CREATE TABLE IF NOT EXISTS meal_entries (
 -- ========================================
 -- Indexes for Performance
 -- ========================================
-CREATE INDEX IF NOT EXISTS idx_meal_entries_user_date ON meal_entries(user_id, entry_date DESC);
-CREATE INDEX IF NOT EXISTS idx_meal_entries_user_id ON meal_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_meal_entries_profile_date ON meal_entries(profile_id, entry_date DESC);
+CREATE INDEX IF NOT EXISTS idx_meal_entries_profile_id ON meal_entries(profile_id);
 CREATE INDEX IF NOT EXISTS idx_food_items_location_date ON food_items(location, date);
 CREATE INDEX IF NOT EXISTS idx_food_items_name ON food_items(name);
-CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);
 
 -- ========================================
 -- Row Level Security (Optional but Recommended)
 -- ========================================
--- Enable RLS on all tables
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+-- Enable RLS on tables (profiles RLS is already managed by Supabase Auth)
 ALTER TABLE food_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meal_entries ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if they exist (to allow re-running this script)
-DROP POLICY IF EXISTS "Allow anonymous access to users" ON users;
 DROP POLICY IF EXISTS "Allow anonymous access to food_items" ON food_items;
 DROP POLICY IF EXISTS "Allow anonymous access to meal_entries" ON meal_entries;
 
 -- Allow anonymous access for now (you can customize this later)
-CREATE POLICY "Allow anonymous access to users"
-    ON users FOR ALL
-    TO anon
-    USING (true)
-    WITH CHECK (true);
-
 CREATE POLICY "Allow anonymous access to food_items"
     ON food_items FOR ALL
     TO anon
@@ -111,12 +108,12 @@ CREATE POLICY "Allow anonymous access to meal_entries"
 SELECT table_name 
 FROM information_schema.tables 
 WHERE table_schema = 'public' 
-AND table_name IN ('users', 'food_items', 'meal_entries');
+AND table_name IN ('profiles', 'food_items', 'meal_entries');
 
--- Check table structures
+-- Check profiles table structure
 SELECT column_name, data_type, is_nullable
 FROM information_schema.columns
-WHERE table_name = 'users'
+WHERE table_name = 'profiles'
 ORDER BY ordinal_position;
 
 SELECT column_name, data_type, is_nullable
