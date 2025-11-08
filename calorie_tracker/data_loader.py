@@ -1,7 +1,7 @@
 import json
 from typing import Dict, List
 from models import FoodItem
-from database_json import JSONDatabase  # Using JSON database for testing
+from database import Database  # Using Supabase database
 
 
 def parse_nutrition_value(value: str) -> float:
@@ -60,7 +60,7 @@ def load_dining_hall_menus(json_path: str) -> List[FoodItem]:
     return food_items
 
 
-def populate_database_from_json(json_path: str, db: JSONDatabase):
+def populate_database_from_json(json_path: str, db: Database):
     """
     Load all food items from JSON and insert them into the database
     """
@@ -108,9 +108,12 @@ def get_available_locations(json_path: str) -> List[str]:
 if __name__ == "__main__":
     # Example usage: populate database from JSON
     import os
+    from dotenv import load_dotenv
     
-    # Initialize database connection (using JSON for testing)
-    db = JSONDatabase()
+    load_dotenv()
+    
+    # Initialize database connection (using Supabase)
+    db = Database()
     
     # Path to the JSON file
     json_file = "../backend/all_dining_halls_menus.json"

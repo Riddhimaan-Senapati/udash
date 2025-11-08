@@ -78,20 +78,25 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE food_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meal_entries ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (to allow re-running this script)
+DROP POLICY IF EXISTS "Allow anonymous access to users" ON users;
+DROP POLICY IF EXISTS "Allow anonymous access to food_items" ON food_items;
+DROP POLICY IF EXISTS "Allow anonymous access to meal_entries" ON meal_entries;
+
 -- Allow anonymous access for now (you can customize this later)
-CREATE POLICY IF NOT EXISTS "Allow anonymous access to users"
+CREATE POLICY "Allow anonymous access to users"
     ON users FOR ALL
     TO anon
     USING (true)
     WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Allow anonymous access to food_items"
+CREATE POLICY "Allow anonymous access to food_items"
     ON food_items FOR ALL
     TO anon
     USING (true)
     WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Allow anonymous access to meal_entries"
+CREATE POLICY "Allow anonymous access to meal_entries"
     ON meal_entries FOR ALL
     TO anon
     USING (true)

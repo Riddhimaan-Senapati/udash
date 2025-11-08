@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from database_json import JSONDatabase  # Using JSON database for testing
+from database import Database  # Using Supabase database
 from models import User, FoodItem, MealEntry
 from data_loader import get_available_dates, get_available_locations
 import os
@@ -16,8 +16,16 @@ st.set_page_config(
 # Initialize database connection
 @st.cache_resource
 def get_database():
-    """Initialize JSON database (switch to Supabase later)"""
-    return JSONDatabase(data_dir="data")
+    """Initialize Supabase database"""
+    try:
+        return Database()
+    except ValueError as e:
+        st.error(f"Database connection error: {e}")
+        st.info("Please create a .env file with your Supabase credentials. See .env.example for reference.")
+        st.stop()
+    except Exception as e:
+        st.error(f"Unexpected error: {e}")
+        st.stop()
 
 db = get_database()
 
