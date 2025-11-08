@@ -1,9 +1,23 @@
 FROM public.ecr.aws/lambda/python:3.12
 
-# Install Playwright and dependencies
+# Install system dependencies for Chromium
+RUN yum install -y \
+    nss \
+    atk \
+    cups-libs \
+    libdrm \
+    libXcomposite \
+    libXdamage \
+    libXrandr \
+    libgbm \
+    alsa-lib \
+    && yum clean all
+
+# Install Python packages
 RUN pip install playwright beautifulsoup4 soupsieve supabase httpx --no-cache-dir
+
+# Install Chromium browser
 RUN playwright install chromium
-RUN playwright install-deps chromium
 
 # Copy function code
 COPY lambda_function.py scraper_utils.py ${LAMBDA_TASK_ROOT}/
