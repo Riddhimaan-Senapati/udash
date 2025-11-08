@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__list_tables",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(dir:*)",
+      "Bash(del check_profiles.py debug_supabase.py create_test_user_and_order.py prepare_test_order.py test_orders_setup.py)",
+      "mcp__supabase__list_projects",
+      "Bash(del:*)",
+      "mcp__supabase__apply_migration",
+      "Bash(timeout /t 3)",
+      "Bash(taskkill /F /PID 20492)",
+      "Bash(taskkill //F //PID 20492)",
+      "Bash(.venv/Scripts/streamlit run streamlit_app.py)",
+      "Bash(curl:*)",
+      "Bash(taskkill //F //PID 21124)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
