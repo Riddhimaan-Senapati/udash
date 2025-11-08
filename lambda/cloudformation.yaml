@@ -13,6 +13,17 @@ Parameters:
     NoEcho: true
 
 Resources:
+  # Lambda Layer for Playwright
+  PlaywrightLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: !Sub '${AWS::StackName}-playwright-layer'
+      Description: 'Playwright with Chromium browser for web scraping'
+      Content:
+        S3Bucket: umass-dining-lambda-deployments
+        S3Key: playwright-layer.zip
+      CompatibleRuntimes:
+        - python3.12
   # IAM Role for Lambda
   LambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -41,11 +52,12 @@ Resources:
       MemorySize: 2048  # 2GB for Playwright
       EphemeralStorage:
         Size: 2048  # 2GB temp storage for Playwright
+      Layers:
+        - !Ref PlaywrightLayer
       Environment:
         Variables:
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_KEY: !Ref SupabaseKey
-          PLAYWRIGHT_BROWSERS_PATH: '/tmp/playwright'
       Code:
         ZipFile: |
           import json

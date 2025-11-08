@@ -4,6 +4,7 @@
 playwright==1.48.0
 beautifulsoup4==4.12.3
 soupsieve==2.6
+playwright-stealth==1.0.6
 
 # Database
 supabase==2.10.0

@@ -105,8 +105,8 @@ def lambda_handler(event, context):
 
         print(f"Supabase URL configured: {SUPABASE_URL[:30]}...")
 
-        # Playwright browsers are pre-installed in deployment package
-        print("\n[INFO] Using pre-installed Playwright browsers from deployment package")
+        # Playwright browsers are in Lambda layer
+        print("\n[INFO] Using Playwright from Lambda layer")
 
         # Scrape all dining halls
         print("\n[SCRAPE] Starting menu scraping...")

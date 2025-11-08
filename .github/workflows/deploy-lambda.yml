@@ -26,20 +26,32 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: Build Lambda Layer
+        run: |
+          cd lambda
+          mkdir -p layer/python
+          pip install playwright beautifulsoup4 soupsieve -t layer/python/ --upgrade --no-cache-dir
+          cd layer/python
+          PLAYWRIGHT_BROWSERS_PATH=. python -m playwright install chromium
+          cd ../..
+          cd layer
+          zip -r9 ../playwright-layer.zip . -x "*.pyc" -x "*__pycache__*"
+          cd ..
+
+      - name: Install function dependencies
         run: |
           cd lambda
           python -m pip install --upgrade pip
-          pip install playwright --upgrade
-          pip install -r requirements.txt -t package/ --upgrade
-          PLAYWRIGHT_BROWSERS_PATH=package/.browsers python -m playwright install chromium --with-deps
+          pip install supabase httpx -t package/ --upgrade --no-cache-dir
 
       - name: Package Lambda function
         run: |
           cd lambda/package
           cp ../lambda_function.py .
           cp ../scraper_utils.py .
-          zip -r9 ../lambda-deployment.zip . .browsers/
+          find . -type d -name "__pycache__" -delete 2>/dev/null || true
+          find . -type f -name "*.pyc" -delete
+          zip -r9 ../lambda-deployment.zip .
           cd ..
           zip -g lambda-deployment.zip lambda_function.py scraper_utils.py
 
@@ -71,26 +83,24 @@ jobs:
             --output text)
           echo "function_name=$FUNCTION_NAME" >> $GITHUB_OUTPUT
 
-      - name: Upload to S3 and update Lambda
+      - name: Upload layer and function to S3
         run: |
           BUCKET_NAME="umass-dining-lambda-deployments"
-          
-          # Create bucket if it doesn't exist
           aws s3 ls s3://$BUCKET_NAME 2>/dev/null || aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }}
           
-          # Generate hash of deployment package
+          LAYER_HASH=$(md5sum lambda/playwright-layer.zip | cut -d' ' -f1)
+          if ! aws s3 ls s3://$BUCKET_NAME/playwright-layer.zip 2>/dev/null; then
+            echo "Uploading Playwright layer"
+            aws s3 cp lambda/playwright-layer.zip s3://$BUCKET_NAME/playwright-layer.zip
+          fi
+          
           PACKAGE_HASH=$(md5sum lambda/lambda-deployment.zip | cut -d' ' -f1)
           S3_KEY="lambda-deployment-${PACKAGE_HASH}.zip"
-          
-          # Check if this version already exists in S3
-          if aws s3 ls s3://$BUCKET_NAME/$S3_KEY 2>/dev/null; then
-            echo "Package already exists in S3, skipping upload"
-          else
-            echo "Uploading new package to S3"
+          if ! aws s3 ls s3://$BUCKET_NAME/$S3_KEY 2>/dev/null; then
+            echo "Uploading function package"
             aws s3 cp lambda/lambda-deployment.zip s3://$BUCKET_NAME/$S3_KEY
           fi
           
-          # Update Lambda function
           aws lambda update-function-code \
             --function-name ${{ steps.get-function.outputs.function_name }} \
             --s3-bucket $BUCKET_NAME \
