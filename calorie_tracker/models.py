@@ -5,14 +5,15 @@ from datetime import datetime
 
 @dataclass
 class User:
-    """User profile with health metrics"""
-    id: Optional[int]
-    username: str
-    age: int
-    sex: str  # 'M' or 'F'
-    height_cm: float
-    weight_kg: float
-    activity_level: str  # sedentary, light, moderate, active, very_active
+    """User profile with health metrics (maps to profiles table)"""
+    id: Optional[str]  # UUID from profiles table
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    age: Optional[int] = None
+    sex: Optional[str] = None  # 'M' or 'F'
+    height_cm: Optional[float] = None
+    weight_kg: Optional[float] = None
+    activity_level: Optional[str] = None  # sedentary, light, moderate, active, very_active
     bmr: Optional[float] = None
     tdee: Optional[float] = None
     created_at: Optional[datetime] = None
@@ -73,9 +74,9 @@ class FoodItem:
 
 @dataclass
 class MealEntry:
-    """A meal entry linking a user to a food item"""
+    """A meal entry linking a profile to a food item"""
     id: Optional[int]
-    user_id: int
+    profile_id: str  # UUID reference to profiles table
     food_item_id: int
     entry_date: str  # Format: YYYY-MM-DD
     meal_category: str  # Breakfast, Lunch, or Dinner

@@ -80,14 +80,13 @@ class Database:
         print("Please run the SQL initialization script in your Supabase SQL editor.")
         print("See the init_database() method docstring for the SQL commands.")
     
-    # ==================== USER OPERATIONS ====================
+    # ==================== USER/PROFILE OPERATIONS ====================
     
     def create_user(self, user: User) -> User:
-        """Create a new user"""
+        """Create or update a user profile"""
         user.update_calculations()
         
         data = {
-            "username": user.username,
             "age": user.age,
             "sex": user.sex,
             "height_cm": user.height_cm,
@@ -97,67 +96,82 @@ class Database:
             "tdee": user.tdee
         }
         
-        response = self.client.table("users").insert(data).execute()
+        # Add optional fields
+        if user.email:
+            data["email"] = user.email
+        if user.full_name:
+            data["full_name"] = user.full_name
+        
+        if user.id:
+            # Update existing profile
+            response = self.client.table("profiles").update(data).eq("id", user.id).execute()
+        else:
+            # Insert new profile
+            response = self.client.table("profiles").insert(data).execute()
+            
         if response.data:
             result = response.data[0]
             user.id = result["id"]
-            user.created_at = result["created_at"]
+            user.created_at = result.get("created_at")
         return user
     
-    def get_user(self, user_id: int) -> Optional[User]:
-        """Get user by ID"""
-        response = self.client.table("users").select("*").eq("id", user_id).execute()
+    def get_user(self, user_id: str) -> Optional[User]:
+        """Get user by ID (UUID)"""
+        response = self.client.table("profiles").select("*").eq("id", user_id).execute()
         if response.data:
             data = response.data[0]
             return User(
                 id=data["id"],
-                username=data["username"],
-                age=data["age"],
-                sex=data["sex"],
-                height_cm=data["height_cm"],
-                weight_kg=data["weight_kg"],
-                activity_level=data["activity_level"],
-                bmr=data["bmr"],
-                tdee=data["tdee"],
-                created_at=data["created_at"]
+                email=data.get("email"),
+                full_name=data.get("full_name"),
+                age=data.get("age"),
+                sex=data.get("sex"),
+                height_cm=data.get("height_cm"),
+                weight_kg=data.get("weight_kg"),
+                activity_level=data.get("activity_level"),
+                bmr=data.get("bmr"),
+                tdee=data.get("tdee"),
+                created_at=data.get("created_at")
             )
         return None
     
-    def get_user_by_username(self, username: str) -> Optional[User]:
-        """Get user by username"""
-        response = self.client.table("users").select("*").eq("username", username).execute()
+    def get_user_by_email(self, email: str) -> Optional[User]:
+        """Get user by email"""
+        response = self.client.table("profiles").select("*").eq("email", email).execute()
         if response.data:
             data = response.data[0]
             return User(
                 id=data["id"],
-                username=data["username"],
-                age=data["age"],
-                sex=data["sex"],
-                height_cm=data["height_cm"],
-                weight_kg=data["weight_kg"],
-                activity_level=data["activity_level"],
-                bmr=data["bmr"],
-                tdee=data["tdee"],
-                created_at=data["created_at"]
+                email=data.get("email"),
+                full_name=data.get("full_name"),
+                age=data.get("age"),
+                sex=data.get("sex"),
+                height_cm=data.get("height_cm"),
+                weight_kg=data.get("weight_kg"),
+                activity_level=data.get("activity_level"),
+                bmr=data.get("bmr"),
+                tdee=data.get("tdee"),
+                created_at=data.get("created_at")
             )
         return None
     
     def get_all_users(self) -> List[User]:
-        """Get all users"""
-        response = self.client.table("users").select("*").order("username").execute()
+        """Get all users/profiles"""
+        response = self.client.table("profiles").select("*").order("email").execute()
         users = []
         for data in response.data:
             users.append(User(
                 id=data["id"],
-                username=data["username"],
-                age=data["age"],
-                sex=data["sex"],
-                height_cm=data["height_cm"],
-                weight_kg=data["weight_kg"],
-                activity_level=data["activity_level"],
-                bmr=data["bmr"],
-                tdee=data["tdee"],
-                created_at=data["created_at"]
+                email=data.get("email"),
+                full_name=data.get("full_name"),
+                age=data.get("age"),
+                sex=data.get("sex"),
+                height_cm=data.get("height_cm"),
+                weight_kg=data.get("weight_kg"),
+                activity_level=data.get("activity_level"),
+                bmr=data.get("bmr"),
+                tdee=data.get("tdee"),
+                created_at=data.get("created_at")
             ))
         return users
     
@@ -175,12 +189,17 @@ class Database:
             "tdee": user.tdee
         }
         
-        self.client.table("users").update(data).eq("id", user.id).execute()
+        if user.email:
+            data["email"] = user.email
+        if user.full_name:
+            data["full_name"] = user.full_name
+        
+        self.client.table("profiles").update(data).eq("id", user.id).execute()
         return user
     
-    def delete_user(self, user_id: int):
-        """Delete a user"""
-        self.client.table("users").delete().eq("id", user_id).execute()
+    def delete_user(self, user_id: str):
+        """Delete a user/profile"""
+        self.client.table("profiles").delete().eq("id", user_id).execute()
     
     # ==================== FOOD ITEM OPERATIONS ====================
     
@@ -334,11 +353,11 @@ class Database:
             entry.created_at = response.data[0]["created_at"]
         return entry
     
-    def get_user_meals_for_date(self, user_id: int, date: str) -> Dict[str, List[MealEntry]]:
-        """Get all meals for a user on a specific date, grouped by meal category"""
+    def get_user_meals_for_date(self, profile_id: str, date: str) -> Dict[str, List[MealEntry]]:
+        """Get all meals for a profile on a specific date, grouped by meal category"""
         response = self.client.table("meal_entries").select(
             "*, food_items(*)"
-        ).eq("user_id", user_id).eq("entry_date", date).execute()
+        ).eq("profile_id", profile_id).eq("entry_date", date).execute()
         
         meals_by_category = {"Breakfast": [], "Lunch": [], "Dinner": []}
         
@@ -346,7 +365,7 @@ class Database:
             food_data = data["food_items"]
             entry = MealEntry(
                 id=data["id"],
-                user_id=data["user_id"],
+                profile_id=data["profile_id"],
                 food_item_id=data["food_item_id"],
                 entry_date=data["entry_date"],
                 meal_category=data["meal_category"],
@@ -366,8 +385,8 @@ class Database:
         
         return meals_by_category
     
-    def get_user_meals_7_days(self, user_id: int) -> Dict[str, Dict[str, List[MealEntry]]]:
-        """Get 7 days of meal history for a user"""
+    def get_user_meals_7_days(self, profile_id: str) -> Dict[str, Dict[str, List[MealEntry]]]:
+        """Get 7 days of meal history for a profile"""
         today = datetime.now().date()
         seven_days_ago = today - timedelta(days=6)
         
@@ -376,7 +395,7 @@ class Database:
         
         while current_date <= today:
             date_str = current_date.strftime("%Y-%m-%d")
-            result[date_str] = self.get_user_meals_for_date(user_id, date_str)
+            result[date_str] = self.get_user_meals_for_date(profile_id, date_str)
             current_date += timedelta(days=1)
         
         return result
@@ -384,6 +403,26 @@ class Database:
     def delete_meal_entry(self, entry_id: int):
         """Delete a meal entry"""
         self.client.table("meal_entries").delete().eq("id", entry_id).execute()
+    
+    def get_user_by_username(self, username: str) -> Optional[User]:
+        """Legacy method - get user by full_name for backward compatibility"""
+        response = self.client.table("profiles").select("*").eq("full_name", username).execute()
+        if response.data:
+            data = response.data[0]
+            return User(
+                id=data["id"],
+                email=data.get("email"),
+                full_name=data.get("full_name"),
+                age=data.get("age"),
+                sex=data.get("sex"),
+                height_cm=data.get("height_cm"),
+                weight_kg=data.get("weight_kg"),
+                activity_level=data.get("activity_level"),
+                bmr=data.get("bmr"),
+                tdee=data.get("tdee"),
+                created_at=data.get("created_at")
+            )
+        return None
     
     def get_daily_totals(self, user_id: int, date: str) -> Dict[str, float]:
         """Calculate total nutrition for a user on a specific date"""
