@@ -26,19 +26,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Build and push Docker image
-        run: |
-          cd lambda
-          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin 904233117895.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
-          
-          REPO_NAME="umass-dining-scraper"
-          aws ecr describe-repositories --repository-names $REPO_NAME 2>/dev/null || aws ecr create-repository --repository-name $REPO_NAME
-          
-          IMAGE_URI="904233117895.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$REPO_NAME:latest"
-          docker build -t $IMAGE_URI .
-          docker push $IMAGE_URI
-          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -46,7 +33,16 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-
+      - name: Build and push Docker image
+        run: |
+          cd lambda
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin 904233117895.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          REPO_NAME="umass-dining-scraper"
+          aws ecr describe-repositories --repository-names $REPO_NAME 2>/dev/null || aws ecr create-repository --repository-name $REPO_NAME
+          IMAGE_URI="904233117895.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$REPO_NAME:latest"
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
 
       - name: Deploy CloudFormation stack
         run: |
