@@ -74,21 +74,41 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Activity level mapping (integer to string)
+ACTIVITY_LEVEL_MAP = {
+    1: "sedentary",
+    2: "light",
+    3: "moderate",
+    4: "active",
+    5: "very_active"
+}
+
+ACTIVITY_LEVEL_REVERSE_MAP = {v: k for k, v in ACTIVITY_LEVEL_MAP.items()}
+
 
 def display_user_metrics(user: User):
     """Display user health metrics in a nice format"""
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("BMR", f"{user.bmr:.0f} kcal/day")
+        st.metric("BMR", f"{user.bmr:.0f} kcal/day" if user.bmr else "N/A")
     with col2:
-        st.metric("TDEE", f"{user.tdee:.0f} kcal/day")
+        st.metric("TDEE", f"{user.tdee:.0f} kcal/day" if user.tdee else "N/A")
     with col3:
-        st.metric("Weight", f"{user.weight_kg:.1f} kg")
+        st.metric("Weight", f"{user.weight_kg:.1f} kg" if user.weight_kg else "N/A")
     with col4:
-        st.metric("Height", f"{user.height_cm:.0f} cm")
+        st.metric("Height", f"{user.height_cm:.0f} cm" if user.height_cm else "N/A")
     
-    st.info(f"**Profile:** {user.age} years old, {user.sex}, Activity Level: {user.activity_level.replace('_', ' ').title()}")
+    # Handle activity_level - convert integer to readable string
+    if user.activity_level:
+        if isinstance(user.activity_level, int):
+            activity_str = ACTIVITY_LEVEL_MAP.get(user.activity_level, f"Level {user.activity_level}").replace('_', ' ').title()
+        else:
+            activity_str = str(user.activity_level).replace('_', ' ').title()
+    else:
+        activity_str = 'N/A'
+    
+    st.info(f"**Profile:** {user.age or 'N/A'} years old, {user.sex or 'N/A'}, Activity Level: {activity_str}")
 
 
 def display_nutrition_chart(daily_totals: dict, user_tdee: float):
@@ -96,6 +116,11 @@ def display_nutrition_chart(daily_totals: dict, user_tdee: float):
     if daily_totals["calories"] == 0:
         st.info("No meals logged for this day")
         return
+    
+    # Handle case where TDEE might not be set
+    if not user_tdee or user_tdee == 0:
+        user_tdee = 2000  # Default TDEE
+        st.warning("TDEE not calculated. Using default value of 2000 kcal/day")
     
     # Create progress bar for calories vs TDEE
     calorie_percent = (daily_totals["calories"] / user_tdee) * 100
@@ -174,47 +199,58 @@ def display_meal_entries(meals: list[MealEntry]):
 def create_user_form():
     """Form to create a new user"""
     with st.form("create_user_form"):
-        st.subheader("Create New User")
+        st.subheader("Create New Profile")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            username = st.text_input("Username*")
+            email = st.text_input("Email*")
+            full_name = st.text_input("Full Name*")
             age = st.number_input("Age*", min_value=13, max_value=120, value=25)
             sex = st.selectbox("Sex*", ["M", "F"])
             height_cm = st.number_input("Height (cm)*", min_value=100.0, max_value=250.0, value=170.0, step=0.5)
         
         with col2:
             weight_kg = st.number_input("Weight (kg)*", min_value=30.0, max_value=300.0, value=70.0, step=0.1)
-            activity_level = st.selectbox("Activity Level*", [
-                "sedentary",
-                "light",
-                "moderate",
-                "active",
-                "very_active"
-            ])
+            activity_level_str = st.selectbox("Activity Level*", [
+                "Sedentary",
+                "Light",
+                "Moderate",
+                "Active",
+                "Very Active"
+            ], format_func=lambda x: x)
+            
+            # Convert display string to database integer
+            activity_map_display = {
+                "Sedentary": 1,
+                "Light": 2,
+                "Moderate": 3,
+                "Active": 4,
+                "Very Active": 5
+            }
         
-        submitted = st.form_submit_button("Create User")
+        submitted = st.form_submit_button("Create Profile")
         
         if submitted:
-            if not username:
-                st.error("Username is required")
+            if not email or not full_name:
+                st.error("Email and Full Name are required")
             else:
                 try:
                     user = User(
                         id=None,
-                        username=username,
+                        email=email,
+                        full_name=full_name,
                         age=age,
                         sex=sex,
                         height_cm=height_cm,
                         weight_kg=weight_kg,
-                        activity_level=activity_level
+                        activity_level=activity_map_display[activity_level_str]
                     )
                     created_user = db.create_user(user)
-                    st.success(f"User '{username}' created successfully!")
+                    st.success(f"Profile '{full_name}' created successfully!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error creating user: {e}")
+                    st.error(f"Error creating profile: {e}")
 
 
 def main():
@@ -226,7 +262,7 @@ def main():
         "User Dashboard",
         "Browse Foods",
         "Add Food to Tracker",
-        "Manage Users",
+        "Manage Profiles",
         "View All Food Items"
     ])
     
@@ -236,14 +272,14 @@ def main():
         # User selection
         users = db.get_all_users()
         if not users:
-            st.warning("No users found. Please create a user first.")
+            st.warning("No profiles found. Please create a profile first.")
             return
         
-        user_options = {user.username: user for user in users}
-        selected_username = st.selectbox("Select User", list(user_options.keys()))
+        user_options = {f"{user.full_name or user.email or user.id}": user for user in users}
+        selected_name = st.selectbox("Select Profile", list(user_options.keys()))
         
-        if selected_username:
-            user = user_options[selected_username]
+        if selected_name:
+            user = user_options[selected_name]
             
             # Display user metrics
             display_user_metrics(user)
@@ -332,14 +368,14 @@ def main():
         # User selection
         users = db.get_all_users()
         if not users:
-            st.warning("No users found. Please create a user first.")
+            st.warning("No profiles found. Please create a profile first.")
             return
         
-        user_options = {user.username: user for user in users}
-        selected_username = st.selectbox("Select User", list(user_options.keys()))
+        user_options = {f"{user.full_name or user.email or user.id}": user for user in users}
+        selected_name = st.selectbox("Select Profile", list(user_options.keys()))
         
-        if selected_username:
-            user = user_options[selected_username]
+        if selected_name:
+            user = user_options[selected_name]
             
             # Search for food
             search_query = st.text_input("Search for food", placeholder="Enter food name...")
@@ -372,7 +408,7 @@ def main():
                                     if st.form_submit_button("Add"):
                                         entry = MealEntry(
                                             id=None,
-                                            user_id=user.id,
+                                            profile_id=user.id,
                                             food_item_id=food.id,
                                             entry_date=entry_date.strftime("%Y-%m-%d"),
                                             meal_category=meal_category,
@@ -386,9 +422,9 @@ def main():
                     st.info("No foods found matching your search")
     
     elif page == "Manage Users":
-        st.header("Manage Users")
+        st.header("Manage Profiles")
         
-        tab1, tab2 = st.tabs(["Create User", "View/Edit Users"])
+        tab1, tab2 = st.tabs(["Create Profile", "View/Edit Profiles"])
         
         with tab1:
             create_user_form()
@@ -397,25 +433,39 @@ def main():
             users = db.get_all_users()
             
             if not users:
-                st.info("No users found")
+                st.info("No profiles found")
             else:
                 for user in users:
-                    with st.expander(f"👤 {user.username}"):
+                    with st.expander(f"👤 {user.full_name or user.email or user.id}"):
                         col1, col2 = st.columns([3, 1])
                         
                         with col1:
-                            st.write(f"**Age:** {user.age}")
-                            st.write(f"**Sex:** {user.sex}")
-                            st.write(f"**Height:** {user.height_cm} cm")
-                            st.write(f"**Weight:** {user.weight_kg} kg")
-                            st.write(f"**Activity Level:** {user.activity_level}")
-                            st.write(f"**BMR:** {user.bmr:.0f} kcal/day")
-                            st.write(f"**TDEE:** {user.tdee:.0f} kcal/day")
+                            st.write(f"**Email:** {user.email or 'N/A'}")
+                            st.write(f"**Full Name:** {user.full_name or 'N/A'}")
+                            st.write(f"**Age:** {user.age or 'N/A'}")
+                            st.write(f"**Sex:** {user.sex or 'N/A'}")
+                            st.write(f"**Height:** {user.height_cm or 'N/A'} cm")
+                            st.write(f"**Weight:** {user.weight_kg or 'N/A'} kg")
+                            
+                            # Display activity level as readable string
+                            if user.activity_level:
+                                if isinstance(user.activity_level, int):
+                                    activity_display = ACTIVITY_LEVEL_MAP.get(user.activity_level, f"Level {user.activity_level}").replace('_', ' ').title()
+                                else:
+                                    activity_display = str(user.activity_level)
+                                st.write(f"**Activity Level:** {activity_display}")
+                            else:
+                                st.write(f"**Activity Level:** N/A")
+                            
+                            if user.bmr:
+                                st.write(f"**BMR:** {user.bmr:.0f} kcal/day")
+                            if user.tdee:
+                                st.write(f"**TDEE:** {user.tdee:.0f} kcal/day")
                         
                         with col2:
                             if st.button("Delete", key=f"delete_{user.id}"):
                                 db.delete_user(user.id)
-                                st.success(f"Deleted user {user.username}")
+                                st.success(f"Deleted profile")
                                 st.rerun()
     
     elif page == "View All Food Items":
