@@ -36,7 +36,7 @@ A comprehensive multi-user calorie tracking application with persistent storage,
 - ✅ **User Dashboard**
   - View 7-day meal history
   - Daily calorie totals vs TDEE target
-  - Interactive macronutrient charts (Plotly)
+  - Interactive macronutrient progress bars
   - Health metrics display (BMR, TDEE, weight, height)
   - Expandable day views with meal breakdowns
 
@@ -87,15 +87,13 @@ calorie_tracker/
 ├── .env.example              # Environment variables template
 ├── .gitignore               # Git ignore file
 ├── requirements.txt         # Python dependencies
-├── README.md               # Full documentation
-├── QUICKSTART.md           # Quick start guide
 ├── PROJECT_SUMMARY.md      # This file
 ├── init_database.sql       # SQL initialization script
 ├── setup.py                # Automated setup script
 ├── models.py               # Data models (User, FoodItem, MealEntry)
 ├── database.py             # Supabase database interface
 ├── data_loader.py          # JSON to database loader
-└── streamlit_app.py        # Main application (426 lines)
+└── streamlit_app.py        # Main application (432+ lines)
 ```
 
 ## 🔧 Technologies Used
@@ -103,11 +101,10 @@ calorie_tracker/
 | Technology | Purpose | Version |
 |------------|---------|---------|
 | Python | Core language | 3.8+ |
-| Streamlit | Web dashboard | 1.29.0 |
-| Supabase | PostgreSQL backend | 2.3.0 |
-| Plotly | Interactive charts | 5.18.0 |
-| Pandas | Data manipulation | 2.1.3 |
-| python-dotenv | Environment config | 1.0.0 |
+| Streamlit | Web dashboard | 1.29.0+ |
+| Supabase | PostgreSQL backend | 2.3.0+ |
+| Pandas | Data manipulation | 2.0.0+ |
+| python-dotenv | Environment config | 1.0.0+ |
 
 ## 🧮 BMR & TDEE Calculations
 
@@ -187,7 +184,7 @@ Activity Multipliers:
 - Metric cards for health data
 
 ### Visualizations
-- Bar charts for macronutrients (Plotly)
+- Bar charts for macronutrients (native Streamlit)
 - Daily calorie progress indicators
 - Color-coded nutrition metrics
 - Tabular meal entry displays
@@ -265,9 +262,7 @@ Activity Multipliers:
 
 ## 📖 Documentation Provided
 
-- ✅ `README.md` - Comprehensive documentation (200+ lines)
-- ✅ `QUICKSTART.md` - Step-by-step setup guide
-- ✅ `PROJECT_SUMMARY.md` - This summary document
+- ✅ `PROJECT_SUMMARY.md` - This comprehensive summary document
 - ✅ `init_database.sql` - Commented SQL script
 - ✅ `.env.example` - Environment template
 - ✅ Inline code comments throughout all Python files

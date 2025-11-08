@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from database import Database  # Using Supabase database
 from models import User, FoodItem, MealEntry
-from data_loader import get_available_dates, get_available_locations
+from data_loader import get_available_dates, get_available_locations, populate_database_from_json
 import os
 
 # Page configuration
@@ -28,6 +28,33 @@ def get_database():
         st.stop()
 
 db = get_database()
+
+# Auto-load food data if database is empty
+@st.cache_resource
+def ensure_food_data_loaded(_db):
+    """Check if food data exists in database, if not load it automatically"""
+    try:
+        # Check if food items exist
+        food_items = _db.get_all_food_items()
+        
+        if len(food_items) == 0:
+            # Food data not loaded, load it now
+            json_file = "../backend/all_dining_halls_menus.json"
+            
+            if os.path.exists(json_file):
+                with st.spinner("Loading dining hall menus into database... This will only happen once."):
+                    populate_database_from_json(json_file, _db)
+                st.success("✅ Dining hall menus loaded successfully!")
+            else:
+                st.warning(f"Food data file not found: {json_file}")
+        
+        return True
+    except Exception as e:
+        st.warning(f"Note: Could not auto-load food data: {e}")
+        return False
+
+# Ensure food data is loaded
+ensure_food_data_loaded(db)
 
 # Custom CSS
 st.markdown("""
