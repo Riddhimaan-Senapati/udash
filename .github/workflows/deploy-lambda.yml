@@ -81,7 +81,7 @@ jobs:
         run: |
           aws lambda invoke \
             --function-name ${{ steps.get-function.outputs.function_name }} \
-            --payload '{"test": true}' \
+            --payload file://<(echo '{"test": true}') \
             --log-type Tail \
             response.json
 
