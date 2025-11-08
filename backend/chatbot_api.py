@@ -30,9 +30,14 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 async def startup():
     os.environ.setdefault("GOOGLE_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
 
+class UserLocation(BaseModel):
+    latitude: float
+    longitude: float
+
 class ChatRequest(BaseModel):
     message: str
     user_id: str  # UUID of the user
+    user_location: Optional[UserLocation] = None  # GPS coordinates from browser
 
 class ChatResponse(BaseModel):
     response: str
@@ -136,6 +141,7 @@ def is_weekend(date_str: str) -> bool:
 class ChatbotDeps:
     user_id: str
     chat_history: List[dict]
+    user_location: Optional[dict] = None  # {latitude: float, longitude: float}
 
 # Create the agent with Gemini
 agent = Agent(
@@ -147,39 +153,65 @@ YOUR ROLE:
 1. Browse available food items from dining halls
 2. Search for specific foods or filter by location/meal type
 3. Help users build orders by selecting items
-4. Create orders with all required information
+4. Create orders with ALL required information
 5. View order history and details
 
-ORDER SCHEMA - IMPORTANT:
-When creating orders, you need:
-- user_id (automatically provided)
-- delivery_location (REQUIRED - ask user, e.g., "Southwest Residential Area", "Central Campus", specific dorm)
-- items: list of {food_item_id, quantity}
-- delivery_time (OPTIONAL - ISO format timestamp)
-- special_instructions (OPTIONAL - dietary restrictions, preferences)
+ORDER CREATION PROCESS - FOLLOW THIS STRICTLY:
+When a user wants to create an order, you MUST collect ALL information before calling create_order:
+
+REQUIRED FIELDS:
+1. food_item_ids - Which items they want (from search results)
+2. quantities - How many of each item
+3. delivery_location - WHERE to deliver (text address)
+   - Ask: "Where would you like this delivered?"
+   - Examples: "Southwest Dorms", "Baker Hall Room 420", "Central Campus"
+
+OPTIONAL BUT IMPORTANT FIELDS:
+4. delivery_latitude & delivery_longitude - User's current location coordinates
+   - Ask: "Can you share your current location? This helps our drivers find you faster!"
+   - If they can't share, that's okay - just use the text address
+5. delivery_time - WHEN to deliver
+   - Ask: "When would you like this delivered?" or "ASAP or specific time?"
+6. special_instructions - Dietary needs, allergies, preferences
+   - Ask: "Any dietary restrictions, allergies, or special requests?"
+7. delivery_option - "delivery" or "pickup"
+   - Ask: "Would you like delivery or pickup?"
+
+CONVERSATION FLOW FOR ORDERS:
+1. User browses items → Show them options with IDs
+2. User selects items → Acknowledge their choices
+3. **ASK FOLLOW-UP QUESTIONS** → Collect all missing information one by one
+4. Confirm order summary → Show all details before creating
+5. Create order → Only after you have all required info
+
+IMPORTANT BEHAVIORS:
+- **ALWAYS ask follow-up questions** - Don't assume information!
+- Be conversational - don't ask everything at once
+- If user says "order X", ask for delivery location and other details
+- Show nutritional information (calories, protein, carbs, fat)
+- Help users make healthy choices
+- Remember conversation context to avoid repeating questions
+- If creating order fails due to missing info, ask for it specifically
+
+EXAMPLE CONVERSATION:
+User: "I want to order Scrambled Eggs"
+You: "Great choice! The Scrambled Eggs have 110 cal and 10.6g protein. Where would you like this delivered?"
+User: "Southwest Dorms"
+You: "Perfect! Can you share your current location? This helps our drivers find you faster. (It's optional if you prefer not to)"
+User: "Sure, lat 42.3886, long -72.5292"
+You: "Thanks! Any dietary restrictions or special requests?"
+User: "No peanuts please"
+You: "Got it! When would you like delivery? ASAP or a specific time?"
+User: "ASAP"
+You: "Perfect! Here's your order summary: [details]. Should I place this order?"
 
 Order statuses: 'pending' (default) or 'delivered'
-Auto-calculated fields: total_calories, total_protein, total_carbs, total_fat
-
-CONVERSATION CONTEXT:
-You have access to the user's previous messages in this conversation. Use this context to:
-- Remember what items they've browsed
-- Track their order preferences
-- Avoid repeating questions
-- Provide personalized recommendations
-
-BEHAVIOR:
-- Be friendly and conversational
-- Always show nutritional information (calories, protein, carbs, fat)
-- When searching for food, use today's date by default
-- Ask for delivery location if not provided when creating orders
-- Confirm order details before creating
-- Help users make healthy choices by highlighting nutrition data"""
+Auto-calculated fields: total_calories, total_protein, total_carbs, total_fat"""
 )
 
 @agent.system_prompt
-def add_current_date() -> str:
-    """Add current date to system prompt dynamically"""
+def add_current_date(ctx: RunContext[ChatbotDeps]) -> str:
+    """Add current date and location info to system prompt dynamically"""
     current_date = get_current_date_formatted()
     # Get available dates from database
     try:
@@ -188,12 +220,26 @@ def add_current_date() -> str:
     except:
         dates_str = "checking database..."
 
+    # Add location info if available
+    location_info = ""
+    if ctx.deps.user_location:
+        lat = ctx.deps.user_location.get('latitude')
+        lon = ctx.deps.user_location.get('longitude')
+        location_info = f"\n- User's current location: ({lat:.4f}, {lon:.4f}) - AUTOMATICALLY CAPTURED!"
+
     return f"""CURRENT CONTEXT:
 - Today's date: {current_date}
 - When users ask about food "today" or don't specify a date, use today's date
 - Available dining halls: Berkshire, Worcester, Franklin, Hampshire
 - Meal types: Breakfast, Lunch, Dinner
-- Sample available menu dates: {dates_str}
+- Sample available menu dates: {dates_str}{location_info}
+
+AUTOMATIC LOCATION FEATURE:
+- If user has shared their location, it's available in context
+- When creating orders, USE the captured location coordinates automatically
+- Ask: "I have your current location. Would you like delivery here?"
+- If they confirm, use the coordinates in create_order
+- This makes delivery faster and more accurate!
 
 IMPORTANT DATE HANDLING:
 - The search_food_items tool accepts flexible date formats
@@ -259,11 +305,11 @@ async def search_food_items(
             return f"No food items found{date_msg}. Try different search criteria or check if menus are available for this date.{suggestions}"
 
         # Format results
-        result_lines = [f"Found {len(response.data)} items{' for ' + date if date else ''}:\n"]
+        result_lines = [f"🍽️ Found {len(response.data)} items{' for ' + date if date else ''}:\n"]
 
         for i, item in enumerate(response.data, 1):
             result_lines.append(
-                f"{i}. {item['name']} (ID: {item['id']})\n"
+                f"{i}. **{item['name']}** (ID: {item['id']})\n"
                 f"   📍 {item.get('location', 'Unknown')} - {item.get('meal_type', 'N/A')}\n"
                 f"   🔥 {item['calories']} cal | 💪 {item['protein']}g protein | "
                 f"🍚 {item['total_carb']}g carbs | 🥑 {item['total_fat']}g fat"
@@ -280,19 +326,31 @@ async def create_order(
     food_item_ids: list[int],
     quantities: list[int],
     delivery_location: str,
+    delivery_latitude: Optional[float] = None,
+    delivery_longitude: Optional[float] = None,
     delivery_time: Optional[str] = None,
-    special_instructions: Optional[str] = None
+    special_instructions: Optional[str] = None,
+    delivery_option: Optional[str] = "delivery"
 ) -> str:
     """Create a new order for the user.
 
     Args:
         food_item_ids: List of food item IDs to order (from search results)
         quantities: Quantities for each item (must match length of food_item_ids)
-        delivery_location: WHERE to deliver (REQUIRED - e.g., "Southwest Dorms", "Central Campus", "Room 420 Baker Hall")
+        delivery_location: WHERE to deliver (REQUIRED - text address like "Southwest Dorms", "Room 420 Baker Hall")
+        delivery_latitude: Latitude coordinate of delivery location (OPTIONAL but recommended)
+        delivery_longitude: Longitude coordinate of delivery location (OPTIONAL but recommended)
         delivery_time: WHEN to deliver (OPTIONAL - ISO timestamp like "2025-11-08T18:00:00Z")
-        special_instructions: OPTIONAL special requests (allergies, preferences, etc.)
+        special_instructions: OPTIONAL special requests (allergies, dietary restrictions, preferences, etc.)
+        delivery_option: "delivery" or "pickup" (defaults to "delivery")
 
     Returns order confirmation with ID, items, and nutritional totals.
+
+    IMPORTANT: Before calling this tool, make sure you have:
+    - At least one food item ID
+    - Delivery location (text address)
+    - User's current location coordinates if available
+    If any required information is missing, ask the user first!
     """
     try:
         if len(food_item_ids) != len(quantities):
@@ -334,12 +392,17 @@ async def create_order(
         order_insert = {
             "user_id": ctx.deps.user_id,
             "delivery_location": delivery_location,
-            "status": "pending"
+            "status": "pending",
+            "delivery_option": delivery_option
         }
         if delivery_time:
             order_insert["delivery_time"] = delivery_time
         if special_instructions:
             order_insert["special_instructions"] = special_instructions
+        if delivery_latitude is not None:
+            order_insert["delivery_latitude"] = delivery_latitude
+        if delivery_longitude is not None:
+            order_insert["delivery_longitude"] = delivery_longitude
 
         order_response = supabase.table("orders").insert(order_insert).execute()
 
@@ -389,11 +452,26 @@ async def create_order(
             for food_data, qty in zip(food_items_data, quantities)
         ])
 
+        # Add location coordinates if provided
+        location_details = f"📍 Delivery: {delivery_location}"
+        if delivery_latitude and delivery_longitude:
+            location_details += f"\n🗺️ Coordinates: ({delivery_latitude}, {delivery_longitude})"
+
+        # Add delivery option if not default
+        delivery_info = ""
+        if delivery_option and delivery_option != "delivery":
+            delivery_info = f"\n🚗 Option: {delivery_option.capitalize()}"
+
+        # Add special instructions if provided
+        special_notes = ""
+        if special_instructions:
+            special_notes = f"\n📝 Special Instructions: {special_instructions}"
+
         return f"""✅ Order created successfully!
 
 📦 Order ID: {order_id}
-📍 Delivery: {delivery_location}
-⏰ Status: pending
+{location_details}{delivery_info}
+⏰ Status: pending{special_notes}
 
 🍽️ Items:
 {items_list}
@@ -532,8 +610,20 @@ async def chat(request: ChatRequest):
         # Save user message
         await save_chat_message(request.user_id, "user", request.message)
 
+        # Prepare user location if provided
+        user_location_dict = None
+        if request.user_location:
+            user_location_dict = {
+                "latitude": request.user_location.latitude,
+                "longitude": request.user_location.longitude
+            }
+
         # Run agent with context
-        deps = ChatbotDeps(user_id=request.user_id, chat_history=chat_history)
+        deps = ChatbotDeps(
+            user_id=request.user_id,
+            chat_history=chat_history,
+            user_location=user_location_dict
+        )
 
         result = await agent.run(request.message, deps=deps)
 

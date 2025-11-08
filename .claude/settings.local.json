@@ -18,7 +18,12 @@
       "Bash(taskkill //F //PID 20492)",
       "Bash(.venv/Scripts/streamlit run streamlit_app.py)",
       "Bash(curl:*)",
-      "Bash(taskkill //F //PID 21124)"
+      "Bash(taskkill //F //PID 21124)",
+      "Bash(taskkill //F //PID 8216)",
+      "Bash(.venv/Scripts/pip:*)",
+      "Bash(taskkill //F //PID 30632)",
+      "Bash(taskkill //F //PID 912)",
+      "Bash(taskkill //F //PID 29824)"
     ],
     "deny": [],
     "ask": []
