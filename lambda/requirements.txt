@@ -7,7 +7,7 @@ soupsieve==2.6
 
 # Database
 supabase==2.10.0
-postgrest==0.17.2
+postgrest==0.18.0
 python-dateutil==2.9.0
 
 # HTTP Client (required by Supabase)
