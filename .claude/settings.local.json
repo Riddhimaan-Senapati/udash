@@ -23,7 +23,12 @@
       "Bash(.venv/Scripts/pip:*)",
       "Bash(taskkill //F //PID 30632)",
       "Bash(taskkill //F //PID 912)",
-      "Bash(taskkill //F //PID 29824)"
+      "Bash(taskkill //F //PID 29824)",
+      "Bash(../.venv/Scripts/pip install:*)",
+      "Bash(backend/.venv/Scripts/pip.exe install:*)",
+      "Bash(backend/.venv/Scripts/playwright.exe install:*)",
+      "Bash(../backend/.venv/Scripts/python.exe:*)",
+      "Bash(timeout /t 10)"
     ],
     "deny": [],
     "ask": []

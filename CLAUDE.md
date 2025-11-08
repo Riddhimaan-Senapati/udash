@@ -53,6 +53,14 @@ udash/
 │   ├── requirements.txt
 │   ├── .env.example                 # SUPABASE_URL, SUPABASE_KEY
 │   └── PROJECT_SUMMARY.md           # Detailed feature documentation
+├── lambda/                          # AWS Lambda automated menu scraper
+│   ├── lambda_function.py           # Lambda handler (scraping + DB loading)
+│   ├── cloudformation.yaml          # Infrastructure as Code (Lambda + EventBridge)
+│   ├── requirements.txt             # Lambda dependencies (Playwright, Supabase)
+│   ├── test_lambda_local.py         # Local testing script with mock context
+│   └── README.md                    # Deployment guide and troubleshooting
+├── .github/workflows/
+│   └── deploy-lambda.yml            # GitHub Actions CI/CD for Lambda deployment
 └── README.md                        # Project overview
 ```
 
@@ -123,6 +131,50 @@ streamlit run streamlit_app.py  # Port 8501
 3. Add Food to Tracker - Search foods, add to meal entries
 4. Manage Users - CRUD operations for user profiles
 5. View All Food Items - Complete database listing
+
+### AWS Lambda Menu Scraper (Automated Weekly Updates)
+```bash
+# Local testing
+cd lambda
+python test_lambda_local.py  # Runs Lambda function locally with mock context
+
+# Deploy to AWS (automated via GitHub Actions)
+git add lambda/ .github/workflows/deploy-lambda.yml
+git commit -m "Deploy Lambda menu scraper"
+git push origin main  # Triggers automatic deployment
+```
+
+**Lambda Configuration:**
+- **Runtime**: Python 3.12
+- **Memory**: 2048 MB (2GB for Playwright)
+- **Timeout**: 900 seconds (15 minutes)
+- **Ephemeral Storage**: 2GB for Playwright browsers
+- **Schedule**: Every Saturday at 11:00 AM EST (cron: `0 16 ? * SAT *`)
+- **Trigger**: EventBridge scheduled rule
+
+**What it does:**
+1. Installs Playwright Chromium browser (on Lambda only)
+2. Scrapes all 4 UMass dining halls for available menu dates
+3. Extracts nutrition data (calories, fat, carbs, protein, sodium, fiber, sugars)
+4. Loads data to Supabase `food_items` table
+5. Returns execution summary with item count and timing
+
+**Required GitHub Secrets:**
+- `AWS_ACCESS_KEY_ID` - IAM user access key
+- `AWS_SECRET_ACCESS_KEY` - IAM user secret key
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_KEY` - Supabase service role key
+
+**Deployment Process (GitHub Actions):**
+1. Trigger: Push to `main` branch affecting `lambda/**` or workflow file
+2. Install Python 3.12 and dependencies
+3. Package Lambda function with Playwright
+4. Deploy CloudFormation stack (creates/updates Lambda, IAM, EventBridge, CloudWatch)
+5. Update Lambda function code
+6. Test function execution
+7. Display deployment summary
+
+**Cost Estimate:** ~FREE (within AWS free tier: 400,000 GB-seconds/month)
 
 ## Architecture Details
 
@@ -221,6 +273,60 @@ streamlit run streamlit_app.py  # Port 8501
 - Extracts numeric values from strings ("25.9g" → 25.9)
 - Bulk inserts into Supabase with duplicate handling
 - Provides utility functions: `get_available_dates()`, `get_available_locations()`
+
+### AWS Lambda Architecture (lambda_function.py)
+**Production-Ready Serverless Menu Scraper:**
+- **Lambda Handler** (`lambda_handler`): Main entry point triggered by EventBridge
+  - Combines scraping logic from `backend/scraper.py`
+  - Combines data loading from `calorie_tracker/data_loader.py`
+  - Environment detection (AWS Lambda vs local testing)
+  - Enhanced error handling with specific exception types
+  - Detailed logging with Lambda context (request_id, memory, timing)
+
+**Infrastructure (cloudformation.yaml):**
+- **IAM Role**: Uses AWS managed policy `AWSLambdaBasicExecutionRole`
+- **Lambda Function**: Python 3.12 runtime with 2GB RAM, 15min timeout, 2GB ephemeral storage
+- **Environment Variables**: `SUPABASE_URL`, `SUPABASE_KEY`, `PLAYWRIGHT_BROWSERS_PATH=/tmp/playwright`
+- **EventBridge Rule**: Cron expression `0 16 ? * SAT *` (Saturdays 11 AM EST / 16:00 UTC)
+- **CloudWatch Logs**: 7-day retention for execution logs
+- **Outputs**: Lambda ARN, function name, EventBridge rule ARN, log group name
+
+**CI/CD Pipeline (deploy-lambda.yml):**
+- **Trigger**: Push to `main` affecting `lambda/**` or `.github/workflows/deploy-lambda.yml`
+- **Build Process**:
+  1. Install Python 3.12 and upgrade pip
+  2. Install dependencies to `package/` directory
+  3. Install Playwright with system dependencies (`playwright install-deps chromium`)
+  4. Package Lambda code and dependencies into ZIP
+  5. Deploy CloudFormation stack with Supabase credentials from GitHub Secrets
+  6. Update Lambda function code via AWS CLI
+  7. Test function invocation and verify response
+- **Deployment Target**: AWS region us-east-1
+- **Stack Name**: `umass-dining-menu-scraper`
+
+**Execution Flow:**
+1. **Environment Check**: Detects if running in AWS Lambda or locally
+2. **Playwright Installation** (Lambda only): Installs Chromium browser to `/tmp/playwright`
+3. **Menu Scraping**: Asynchronously scrapes all 4 dining halls
+   - Worcester: https://umassdining.com/locations-menus/worcester/menu
+   - Berkshire: https://umassdining.com/locations-menus/berkshire/menu
+   - Franklin: https://umassdining.com/locations-menus/franklin/menu
+   - Hampshire: https://umassdining.com/locations-menus/hampshire/menu
+4. **Data Validation**: Counts scraped entries, warns if zero
+5. **Supabase Upload**: Batch upsert to `food_items` table (100 items per batch)
+6. **Response**: Returns JSON with status, item count, execution time, request_id
+
+**Error Handling:**
+- `subprocess.TimeoutExpired`: Playwright installation timeout (5min limit)
+- `ValueError`: Missing environment variables
+- Generic `Exception`: All other errors with traceback
+- All errors return HTTP 500 with detailed error info
+
+**Local Testing:**
+- Mock Lambda context class (`MockLambdaContext`)
+- Skips Playwright installation when not in Lambda environment
+- Loads environment variables from `backend/.env`
+- Simulates EventBridge scheduled event payload
 
 ## Health Calculations
 

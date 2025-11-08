@@ -236,7 +236,7 @@ def load_to_supabase(menu_data: Dict):
         except Exception as e:
             print(f"Error inserting batch {i//batch_size + 1}: {e}")
 
-    print(f"✅ Successfully loaded {inserted_count} food items to Supabase")
+    print(f"[SUCCESS] Successfully loaded {inserted_count} food items to Supabase")
     return inserted_count
 
 
@@ -245,6 +245,8 @@ def lambda_handler(event, context):
     AWS Lambda handler function
     Triggered by EventBridge on Saturdays at 11:00 AM
     """
+    import subprocess  # Import at function level for both Lambda and error handling
+
     start_time = datetime.now()
     print(f"Lambda execution started at {start_time.isoformat()}")
     print(f"Event: {json.dumps(event)}")
@@ -260,39 +262,44 @@ def lambda_handler(event, context):
 
         print(f"Supabase URL configured: {SUPABASE_URL[:30]}...")
 
-        # Install Playwright browsers (required for Lambda)
-        import subprocess
-        print("\n📦 Installing Playwright Chromium...")
-        install_result = subprocess.run(
-            ['playwright', 'install', 'chromium'],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=300  # 5 minute timeout for installation
-        )
-        print(f"Playwright installation output: {install_result.stdout}")
-        print(f"Playwright Chromium installed successfully")
+        # Install Playwright browsers (required for Lambda, skip for local testing)
+        # Check if we're running in AWS Lambda environment
+        is_lambda = os.environ.get('AWS_EXECUTION_ENV') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
+
+        if is_lambda:
+            print("\n[INSTALL] Installing Playwright Chromium...")
+            install_result = subprocess.run(
+                ['playwright', 'install', 'chromium'],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=300  # 5 minute timeout for installation
+            )
+            print(f"Playwright installation output: {install_result.stdout}")
+            print(f"Playwright Chromium installed successfully")
+        else:
+            print("\n[SKIP] Skipping Playwright installation (local testing mode)")
 
         # Scrape all dining halls
-        print("\n🔍 Starting menu scraping...")
+        print("\n[SCRAPE] Starting menu scraping...")
         print(f"Time remaining: {context.get_remaining_time_in_millis()}ms")
         menu_data = asyncio.run(scrape_all_dining_halls())
 
         # Validate scraped data
         total_items = sum(len(entries) for entries in menu_data.values())
-        print(f"\n📊 Scraped {total_items} menu entries from {len(menu_data)} dining halls")
+        print(f"\n[DATA] Scraped {total_items} menu entries from {len(menu_data)} dining halls")
 
         if total_items == 0:
-            print("⚠️ Warning: No menu items were scraped")
+            print("[WARNING] No menu items were scraped")
 
         # Load to Supabase
-        print("\n📤 Loading data to Supabase...")
+        print("\n[UPLOAD] Loading data to Supabase...")
         print(f"Time remaining: {context.get_remaining_time_in_millis()}ms")
         item_count = load_to_supabase(menu_data)
 
         # Calculate execution time
         execution_time = (datetime.now() - start_time).total_seconds()
-        print(f"\n⏱️ Total execution time: {execution_time:.2f} seconds")
+        print(f"\n[TIMER] Total execution time: {execution_time:.2f} seconds")
 
         response = {
             'statusCode': 200,
@@ -306,13 +313,13 @@ def lambda_handler(event, context):
             })
         }
 
-        print(f"\n✅ Lambda execution completed successfully")
+        print(f"\n[SUCCESS] Lambda execution completed successfully")
         print(f"Items loaded: {item_count}")
         return response
 
     except subprocess.TimeoutExpired as e:
         error_msg = f"Playwright installation timeout after {e.timeout} seconds"
-        print(f"\n❌ {error_msg}")
+        print(f"\n[ERROR] {error_msg}")
         return {
             'statusCode': 500,
             'body': json.dumps({
@@ -325,7 +332,7 @@ def lambda_handler(event, context):
 
     except ValueError as e:
         error_msg = f"Configuration error: {str(e)}"
-        print(f"\n❌ {error_msg}")
+        print(f"\n[ERROR] {error_msg}")
         return {
             'statusCode': 500,
             'body': json.dumps({
@@ -337,7 +344,7 @@ def lambda_handler(event, context):
         }
 
     except Exception as e:
-        print(f"\n❌ Lambda execution failed: {str(e)}")
+        print(f"\n[ERROR] Lambda execution failed: {str(e)}")
         import traceback
         traceback.print_exc()
 
