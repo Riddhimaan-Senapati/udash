@@ -105,18 +105,8 @@ def lambda_handler(event, context):
 
         print(f"Supabase URL configured: {SUPABASE_URL[:30]}...")
 
-        # Install Playwright browsers in Lambda environment
-        is_lambda = os.environ.get('AWS_EXECUTION_ENV') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
-        if is_lambda:
-            print("\n[INSTALL] Installing Playwright Chromium...")
-            import subprocess
-            install_result = subprocess.run(
-                ['python', '-m', 'playwright', 'install', 'chromium'],
-                capture_output=True, text=True, check=True, timeout=300
-            )
-            print(f"Playwright Chromium installed: {install_result.stdout}")
-        else:
-            print("\n[SKIP] Local testing mode")
+        # Playwright browsers are pre-installed in deployment package
+        print("\n[INFO] Using pre-installed Playwright browsers from deployment package")
 
         # Scrape all dining halls
         print("\n[SCRAPE] Starting menu scraping...")

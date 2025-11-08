@@ -31,18 +31,15 @@ jobs:
           cd lambda
           python -m pip install --upgrade pip
           pip install -r requirements.txt -t package/ --upgrade
-          python -m playwright install chromium
+          PLAYWRIGHT_BROWSERS_PATH=package/.browsers python -m playwright install chromium --with-deps
 
       - name: Package Lambda function
         run: |
           cd lambda/package
-          # Copy Lambda function code and utilities
           cp ../lambda_function.py .
           cp ../scraper_utils.py .
-          # Create deployment package
-          zip -r9 ../lambda-deployment.zip .
+          zip -r9 ../lambda-deployment.zip . .browsers/
           cd ..
-          # Add any files not in package directory
           zip -g lambda-deployment.zip lambda_function.py scraper_utils.py
 
       - name: Configure AWS credentials
