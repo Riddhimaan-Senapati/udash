@@ -87,9 +87,11 @@ DoorSmashOrPass simplifies healthy eating at UMass dining halls by:
 ## 👥 Team
 
 - **Riddhimaan Senapat** - [Role/Contribution]
-- **[Team Member 2]** - [Role/Contribution]
-- **[Team Member 3]** - [Role/Contribution]
-- **[Team Member 4]** - [Role/Contribution]
+- **Neha Kotturu** - [Role/Contribution]
+- **Haluk Yuzukirmizi** - [Role/Contribution]
+- **Egemen Dag** - [Role/Contribution]
+- **Adriana Caraeni** - [Role/Contribution]
+- **Saukhya Shinde** - [Role/Contribution]
 
 ## 🙏 Acknowledgments
 
