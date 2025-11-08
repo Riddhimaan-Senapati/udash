@@ -8,17 +8,14 @@ import json
 import os
 import asyncio
 from datetime import datetime
-from typing import List, Dict
-from playwright.async_api import async_playwright
-from bs4 import BeautifulSoup
+from typing import Dict
 from supabase import create_client, Client
-
+from scraper_utils import scrape_all_dining_halls
 
 # Supabase Configuration
 SUPABASE_URL = os.environ['SUPABASE_URL']
 SUPABASE_KEY = os.environ['SUPABASE_KEY']
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 
 def parse_nutrition_value(value: str) -> float:
     """Extract numeric value from nutrition string (e.g., '25.9g' -> 25.9)"""
@@ -29,160 +26,6 @@ def parse_nutrition_value(value: str) -> float:
         return float(numeric_str) if numeric_str else 0.0
     except ValueError:
         return 0.0
-
-
-async def get_available_dates(page, base_url):
-    """Extract available dates from the dropdown menu"""
-    print(f"Fetching available dates from {base_url}...")
-    await page.goto(base_url, wait_until='networkidle', timeout=60000)
-
-    await page.wait_for_selector('#upcoming-foodpro', timeout=10000)
-
-    dates = await page.evaluate('''() => {
-        const select = document.getElementById('upcoming-foodpro');
-        const options = Array.from(select.options);
-        return options.map(option => ({
-            value: option.value,
-            text: option.text
-        }));
-    }''')
-
-    print(f"Found {len(dates)} available dates")
-    return [(d['value'], d['text']) for d in dates]
-
-
-def parse_menu_from_html(html_content, date_str, location_name):
-    """Parse menu data from HTML content"""
-    soup = BeautifulSoup(html_content, 'html.parser')
-    menu_data = {
-        "date": date_str,
-        "location": location_name,
-        "meals": {}
-    }
-
-    # Find all menu sections
-    menu_sections = soup.find_all('div', class_='menu-block')
-
-    for section in menu_sections:
-        # Get meal type from header
-        meal_header = section.find('div', class_='menu-block__header')
-        if not meal_header:
-            continue
-
-        meal_type = meal_header.get_text(strip=True)
-
-        # Skip if not a main meal
-        if meal_type not in ['Breakfast', 'Lunch', 'Dinner']:
-            continue
-
-        if meal_type not in menu_data["meals"]:
-            menu_data["meals"][meal_type] = {}
-
-        # Get menu items for this section
-        menu_items = section.find_all('button', class_='menu-item')
-
-        current_category = "Main"
-        for item_button in menu_items:
-            item_name_div = item_button.find('div', class_='menu-item__name')
-            if not item_name_div:
-                continue
-
-            item_name = item_name_div.get_text(strip=True)
-
-            # Try to extract nutrition info
-            nutrition = {}
-            nutrition_div = item_button.find('div', class_='menu-item__nutrition')
-            if nutrition_div:
-                nutrition_text = nutrition_div.get_text(strip=True)
-                # Parse nutrition (basic extraction)
-                nutrition['serving_size'] = '1 serving'
-
-                # Extract values from nutrition string if available
-                if 'Calories' in nutrition_text:
-                    parts = nutrition_text.split('|')
-                    for part in parts:
-                        part = part.strip()
-                        if 'Calories' in part:
-                            nutrition['calories'] = part.replace('Calories', '').strip()
-                        elif 'Fat' in part:
-                            nutrition['total_fat'] = part.replace('Total Fat', '').strip()
-                        elif 'Carb' in part:
-                            nutrition['total_carb'] = part.replace('Total Carb.', '').strip()
-                        elif 'Protein' in part:
-                            nutrition['protein'] = part.replace('Protein', '').strip()
-                        elif 'Sodium' in part:
-                            nutrition['sodium'] = part.replace('Sodium', '').strip()
-
-            if current_category not in menu_data["meals"][meal_type]:
-                menu_data["meals"][meal_type][current_category] = []
-
-            menu_data["meals"][meal_type][current_category].append({
-                "name": item_name,
-                "nutrition": nutrition
-            })
-
-    return menu_data
-
-
-async def scrape_dining_hall(base_url, location_name):
-    """Scrape a single dining hall's menus"""
-    async with async_playwright() as p:
-        print(f"Launching browser for {location_name}...")
-        browser = await p.chromium.launch(
-            headless=True,
-            args=['--no-sandbox', '--disable-dev-shm-usage']
-        )
-        page = await browser.new_page()
-
-        try:
-            # Get available dates
-            dates = await get_available_dates(page, base_url)
-
-            location_data = []
-
-            for date_value, date_text in dates:
-                print(f"Scraping {location_name} for {date_text}...")
-
-                # Select the date
-                await page.select_option('#upcoming-foodpro', value=date_value)
-                await asyncio.sleep(2)  # Wait for page to update
-
-                # Get the menu content
-                html = await page.content()
-                menu_data = parse_menu_from_html(html, date_text, location_name)
-                location_data.append(menu_data)
-
-            return location_data
-
-        finally:
-            await browser.close()
-
-
-async def scrape_all_dining_halls():
-    """Scrape all dining hall menus"""
-    dining_halls = {
-        "Worcester": "https://umassdining.com/locations-menus/worcester/menu",
-        "Berkshire": "https://umassdining.com/locations-menus/berkshire/menu",
-        "Franklin": "https://umassdining.com/locations-menus/franklin/menu",
-        "Hampshire": "https://umassdining.com/locations-menus/hampshire/menu"
-    }
-
-    all_menus = {}
-
-    for location_name, url in dining_halls.items():
-        try:
-            print(f"\n{'='*50}")
-            print(f"Scraping {location_name}...")
-            print(f"{'='*50}")
-
-            menus = await scrape_dining_hall(url, location_name)
-            all_menus[location_name] = menus
-
-        except Exception as e:
-            print(f"Error scraping {location_name}: {e}")
-            all_menus[location_name] = []
-
-    return all_menus
 
 
 def load_to_supabase(menu_data: Dict):
@@ -262,23 +105,18 @@ def lambda_handler(event, context):
 
         print(f"Supabase URL configured: {SUPABASE_URL[:30]}...")
 
-        # Install Playwright browsers (required for Lambda, skip for local testing)
-        # Check if we're running in AWS Lambda environment
+        # Install Playwright browsers in Lambda environment
         is_lambda = os.environ.get('AWS_EXECUTION_ENV') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
-
         if is_lambda:
             print("\n[INSTALL] Installing Playwright Chromium...")
+            import subprocess
             install_result = subprocess.run(
-                ['playwright', 'install', 'chromium'],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=300  # 5 minute timeout for installation
+                ['python', '-m', 'playwright', 'install', 'chromium'],
+                capture_output=True, text=True, check=True, timeout=300
             )
-            print(f"Playwright installation output: {install_result.stdout}")
-            print(f"Playwright Chromium installed successfully")
+            print(f"Playwright Chromium installed: {install_result.stdout}")
         else:
-            print("\n[SKIP] Skipping Playwright installation (local testing mode)")
+            print("\n[SKIP] Local testing mode")
 
         # Scrape all dining halls
         print("\n[SCRAPE] Starting menu scraping...")
@@ -365,4 +203,11 @@ def lambda_handler(event, context):
 
 # For local testing
 if __name__ == "__main__":
-    lambda_handler({}, {})
+    class MockContext:
+        request_id = "local-test"
+        function_name = "local-test"
+        memory_limit_in_mb = 512
+        def get_remaining_time_in_millis(self):
+            return 900000
+    
+    lambda_handler({}, MockContext())

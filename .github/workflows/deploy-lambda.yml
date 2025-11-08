@@ -30,23 +30,20 @@ jobs:
         run: |
           cd lambda
           python -m pip install --upgrade pip
-          # Install Lambda dependencies to package directory
-          pip install -r requirements.txt -t package/
-          # Install Playwright with OS dependencies for Lambda environment
-          pip install playwright -t package/
-          # Install system dependencies (required for Lambda)
-          playwright install-deps chromium
+          pip install -r requirements.txt -t package/ --upgrade
+          python -m playwright install chromium
 
       - name: Package Lambda function
         run: |
           cd lambda/package
-          # Copy Lambda function code
+          # Copy Lambda function code and utilities
           cp ../lambda_function.py .
+          cp ../scraper_utils.py .
           # Create deployment package
           zip -r9 ../lambda-deployment.zip .
           cd ..
           # Add any files not in package directory
-          zip -g lambda-deployment.zip lambda_function.py
+          zip -g lambda-deployment.zip lambda_function.py scraper_utils.py
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4

@@ -1,3 +1,22 @@
+# AWS Lambda Menu Scraper
+
+## Recent Fixes
+
+### Issue: Playwright Installation & Scraper Not Working
+**Problem:** 
+- `playwright: command not found` error in GitHub Actions
+- Scraper code wasn't properly extracting menu data
+- Missing `--upgrade` flag causing pip warnings
+
+**Solution:**
+1. **Imported working scraper logic** from `backend/scraper.py` into shared `scraper_utils.py`
+2. **Fixed Playwright installation** command: `python -m playwright install chromium`
+3. **Updated dining hall URLs** to use correct grab-n-go menu endpoints
+4. **Added `--upgrade` flag** to pip install to prevent duplicate warnings
+5. **Improved HTML parsing** to extract nutrition data from `data-*` attributes
+
+---
+
 # AWS Lambda Menu Scraper - Deployment Guide
 
 ## Overview
