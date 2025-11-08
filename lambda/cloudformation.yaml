@@ -33,7 +33,6 @@ Resources:
   MenuScraperFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-scraper'
       PackageType: Image
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 900
@@ -63,12 +62,10 @@ Resources:
   # EventBridge Rule - Run every Saturday at 11:00 AM EST
   WeeklyScheduleRule:
     Type: AWS::Events::Rule
+    DependsOn: MenuScraperFunction
     Properties:
       Name: !Sub '${AWS::StackName}-weekly-schedule'
       Description: 'Trigger menu scraper every Saturday at 11:00 AM EST'
-      # Cron format: minute hour day-of-month month day-of-week year
-      # 11:00 AM EST = 16:00 UTC (accounting for daylight saving)
-      # SAT = Saturday (day 7)
       ScheduleExpression: 'cron(0 16 ? * SAT *)'
       State: ENABLED
       Targets:
