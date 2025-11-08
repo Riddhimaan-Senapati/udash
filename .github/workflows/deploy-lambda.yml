@@ -71,11 +71,30 @@ jobs:
             --output text)
           echo "function_name=$FUNCTION_NAME" >> $GITHUB_OUTPUT
 
-      - name: Update Lambda function code
+      - name: Upload to S3 and update Lambda
         run: |
+          BUCKET_NAME="umass-dining-lambda-deployments"
+          
+          # Create bucket if it doesn't exist
+          aws s3 ls s3://$BUCKET_NAME 2>/dev/null || aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }}
+          
+          # Generate hash of deployment package
+          PACKAGE_HASH=$(md5sum lambda/lambda-deployment.zip | cut -d' ' -f1)
+          S3_KEY="lambda-deployment-${PACKAGE_HASH}.zip"
+          
+          # Check if this version already exists in S3
+          if aws s3 ls s3://$BUCKET_NAME/$S3_KEY 2>/dev/null; then
+            echo "Package already exists in S3, skipping upload"
+          else
+            echo "Uploading new package to S3"
+            aws s3 cp lambda/lambda-deployment.zip s3://$BUCKET_NAME/$S3_KEY
+          fi
+          
+          # Update Lambda function
           aws lambda update-function-code \
             --function-name ${{ steps.get-function.outputs.function_name }} \
-            --zip-file fileb://lambda/lambda-deployment.zip \
+            --s3-bucket $BUCKET_NAME \
+            --s3-key $S3_KEY \
             --publish
 
       - name: Wait for Lambda update
