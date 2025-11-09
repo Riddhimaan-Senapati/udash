@@ -28,7 +28,10 @@
       "Bash(backend/.venv/Scripts/pip.exe install:*)",
       "Bash(backend/.venv/Scripts/playwright.exe install:*)",
       "Bash(../backend/.venv/Scripts/python.exe:*)",
-      "Bash(timeout /t 10)"
+      "Bash(timeout /t 10)",
+      "Bash(..backend.venvScriptspython.exe test_lambda_local.py)",
+      "Bash(python test_lambda_local.py:*)",
+      "Bash(/c/Users/riddh/udash/backend/.venv/Scripts/python.exe:*)"
     ],
     "deny": [],
     "ask": []
