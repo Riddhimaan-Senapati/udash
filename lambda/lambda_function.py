@@ -7,8 +7,8 @@ Runs every Saturday at 11:00 AM via EventBridge
 import json
 import os
 import asyncio
-from datetime import datetime
-from typing import Dict
+from datetime import datetime, timedelta
+from typing import Dict, List
 from supabase import create_client, Client
 from scraper_utils import scrape_all_dining_halls
 
@@ -26,6 +26,73 @@ def parse_nutrition_value(value: str) -> float:
         return float(numeric_str) if numeric_str else 0.0
     except ValueError:
         return 0.0
+
+
+def get_past_week_dates() -> List[str]:
+    """
+    Get list of dates for the past 7 days in the format used by dining hall menus
+    Returns dates from 7 days ago up to yesterday (EXCLUDES today)
+
+    Example formats that may be in the database:
+    - "Fri November 07, 2025"
+    - "2025-11-08"
+    """
+    today = datetime.now()
+    dates = []
+
+    # Start from 1 day ago (yesterday) and go back 7 days
+    # This excludes today's data
+    for i in range(1, 8):
+        date = today - timedelta(days=i)
+        # Format 1: "Fri November 07, 2025" (used by scraper)
+        formatted_date = date.strftime("%a %B %d, %Y")
+        dates.append(formatted_date)
+
+        # Format 2: "2025-11-08" (ISO format backup)
+        iso_date = date.strftime("%Y-%m-%d")
+        dates.append(iso_date)
+
+    return dates
+
+
+def delete_past_week_data():
+    """
+    Delete food items from the past 7 days from Supabase (excludes today)
+    Returns the number of items deleted
+    """
+    print("\n" + "="*60)
+    print("DELETING PAST WEEK'S DATA (EXCLUDING TODAY)")
+    print("="*60)
+
+    # Get dates to delete
+    dates_to_delete = get_past_week_dates()
+    today = datetime.now()
+    week_ago = today - timedelta(days=7)
+    yesterday = today - timedelta(days=1)
+
+    print(f"Deleting data from {week_ago.strftime('%b %d')} to {yesterday.strftime('%b %d')} (excluding today {today.strftime('%b %d')})")
+    print(f"Date formats being deleted: {dates_to_delete[:4]}...")
+
+    try:
+        # Count items before deletion
+        count_response = supabase.table("food_items").select("id", count="exact").in_("date", dates_to_delete).execute()
+        items_to_delete = count_response.count if hasattr(count_response, 'count') else 0
+
+        print(f"Found {items_to_delete} items to delete from past week")
+
+        if items_to_delete == 0:
+            print("No items found to delete")
+            return 0
+
+        # Delete items
+        delete_response = supabase.table("food_items").delete().in_("date", dates_to_delete).execute()
+
+        print(f"[SUCCESS] Deleted {items_to_delete} food items from past week")
+        return items_to_delete
+
+    except Exception as e:
+        print(f"Error deleting past week's data: {e}")
+        raise
 
 
 def load_to_supabase(menu_data: Dict):
@@ -125,6 +192,15 @@ def lambda_handler(event, context):
         print(f"Time remaining: {context.get_remaining_time_in_millis()}ms")
         item_count = load_to_supabase(menu_data)
 
+        # Delete past week's data (after successful scraping and loading)
+        print("\n[CLEANUP] Deleting past week's data...")
+        print(f"Time remaining: {context.get_remaining_time_in_millis()}ms")
+        try:
+            deleted_count = delete_past_week_data()
+        except Exception as e:
+            print(f"[WARNING] Failed to delete past week's data: {e}")
+            deleted_count = 0
+
         # Calculate execution time
         execution_time = (datetime.now() - start_time).total_seconds()
         print(f"\n[TIMER] Total execution time: {execution_time:.2f} seconds")
@@ -135,6 +211,7 @@ def lambda_handler(event, context):
                 'message': 'Menu scraping and database update completed successfully',
                 'timestamp': datetime.now().isoformat(),
                 'items_loaded': item_count,
+                'items_deleted': deleted_count,
                 'dining_halls_scraped': len(menu_data),
                 'execution_time_seconds': execution_time,
                 'request_id': context.request_id
@@ -143,6 +220,7 @@ def lambda_handler(event, context):
 
         print(f"\n[SUCCESS] Lambda execution completed successfully")
         print(f"Items loaded: {item_count}")
+        print(f"Items deleted: {deleted_count}")
         return response
 
     except subprocess.TimeoutExpired as e:
