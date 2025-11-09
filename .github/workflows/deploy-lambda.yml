@@ -79,11 +79,10 @@ jobs:
 
       - name: Test Lambda function
         run: |
-          echo '{"test": true}' > payload.json
           aws lambda invoke \
             --function-name ${{ steps.get-function.outputs.function_name }} \
-            --payload file://payload.json \
-            --log-type Tail \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{}' \
             response.json
           echo "Lambda Response:"
           cat response.json
